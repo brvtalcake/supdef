@@ -1,0 +1,49 @@
+{
+    "version": 4,
+    "configurations": [
+        {
+            "name": "Linux_sup_def",
+            "includePath": [
+                "${workspaceFolder}/include",
+                "${default}",
+                "/usr/include",
+                "/usr/local/include/boost-1_85"
+                /* "${workspaceFolder}/**", */
+                /* "/home/axel/Documents/programmation/c/sup_def/", */
+                /* "/home/axel/Documents/programmation/c/sup_def/sup_def/third_party/", */
+                /* "/home/axel/Documents/programmation/c/sup_def/sup_def/third_party/gnulib_modules", */
+                /* "/home/axel/Documents/programmation/c/sup_def/sup_def/third_party/gnulib_modules/gnulib_build", */
+                /* "/home/axel/Documents/programmation/c/sup_def/sup_def/third_party/gnulib_modules/gnulib_build/gllib", */
+                /* "/home/axel/Documents/programmation/c/sup_def/sup_def/third_party/chaos-pp/", */
+                /* "/home/axel/Documents/programmation/c/sup_def/sup_def/third_party/patterns/include/", */
+                /* "/home/axel/Documents/programmation/c/sup_def/sup_def/third_party/simdutf/include/", */
+                /* "/home/axel/Documents/programmation/c/sup_def/sup_def/third_party/magic_enum/include/", */
+                /* "/home/axel/Documents/programmation/c/sup_def/sup_def/third_party/incbin/", */
+                /* "/home/axel/Documents/programmation/c/sup_def/sup_def/third_party/function2/include/", */
+                /* "/usr/local/lib/gcc/x86_64-pc-linux-gnu/13.2.0/plugin/include", */
+                /* "/usr/local/include/boost-1_85/" */
+            ],
+            "defines": [
+                "_GNU_SOURCE=1",
+                "_LARGEFILE64_SOURCE=1",
+                "_FILE_OFFSET_BITS=64",
+                "_GLIBCXX_CONCEPT_CHECKS=1",
+                "_GLIBCXX_ASSERTIONS=1",
+                /* "_GLIBCXX_DEBUG=1", */
+                "SUPDEF_ADDITIONAL_CHECKS=1",
+                "_FORTIFY_SOURCE=2",
+                "_LARGEFILE_SOURCE=1",
+                "_TIME_BITS=64"
+            ],
+            "compilerPath": "/usr/local/bin/gcc",
+            "cStandard": "gnu23",
+            "cppStandard": "gnu++23",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compilerArgs": [
+                "-O3"
+                /* "-I`/usr/local/bin/g++ -print-file-name=plugin`/include", */
+            ],
+            "mergeConfigurations": false
+        }
+    ]
+}

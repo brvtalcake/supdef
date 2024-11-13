@@ -30,3 +30,9 @@
 *.exe
 *.out
 *.app
+
+main
+text
+packcc
+obj
+icudat*
