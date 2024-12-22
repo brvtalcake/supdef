@@ -14,9 +14,19 @@ function is_defined()
 # only define if not already defined
 function define()
 {
-    if ! is_defined $1; then
-        eval "$1=\"$2\""
+    local name="$1"
+    if ! is_defined "$name"; then
+        shift
+        eval "$name=\"$*\""
     fi
+}
+
+function expand_libs()
+{
+    local _what="--$1"
+    for lib in $LIBS; do
+        printf ' %s ' "$(pkg-config $_what $lib)"
+    done
 }
 
 function cmd()
@@ -25,9 +35,12 @@ function cmd()
     eval "$@"
 }
 
-define CPPFLAGS "-Iinclude"
-define CFLAGS "-std=gnu++23 -Wall -Wextra -Og -ggdb3"
-define LDFLAGS "-L/usr/local/lib -lgrapheme"
+define LIBS "icu-io" "libgrapheme"
+define CPPFLAGS "-Iinclude -D_GNU_SOURCE=1"
+define CFLAGS "$(expand_libs cflags) -std=gnu++23 -Wall -Wextra -Og -ggdb3"
+define LDFLAGS "$(expand_libs libs) -L/usr/local/lib -lgrapheme"
+
+cmd rm -rf obj
 
 for file in $files; do
     cmd mkdir -p "obj/$(dirname $file)"

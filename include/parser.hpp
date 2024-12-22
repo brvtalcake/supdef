@@ -3,25 +3,25 @@
 
 #include <types.hpp>
 #include <directives.hpp>
-#include <mmap.hpp>
+#include <file.hpp>
 
 #include <filesystem>
 #include <vector>
 
+#include <unicode/ustream.h>
+#include <unicode/unistr.h>
+
 namespace supdef
 {
-    std::vector<uint_least32_t> read_whole_file(const std::filesystem::path& filename);
-
     class parser
     {
     public:
-        parser(const char* filename);
+        parser(std::filesystem::path filename);
         ~parser();
 
     private:
-        mmaped_file m_file;
+        source_file m_file;
         location m_loc;
-        /* token_tree m_tree; */
     };
 }
 

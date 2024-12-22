@@ -124,7 +124,8 @@
         "__availability": "cpp",
         "__locale": "cpp",
         "version": "cpp",
-        "__config_site": "c"
+        "__config_site": "c",
+        "strstream": "cpp"
     },
     "mesonbuild.configureOnOpen": false,
     "C_Cpp.default.cppStandard": "gnu++23",
