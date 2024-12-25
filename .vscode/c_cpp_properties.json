@@ -7,7 +7,7 @@
                 "${workspaceFolder}/include",
                 "${default}",
                 "/usr/include",
-                "/usr/local/include/boost-1_85"
+                "/usr/include/boost"
                 /* "${workspaceFolder}/**", */
                 /* "/home/axel/Documents/programmation/c/sup_def/", */
                 /* "/home/axel/Documents/programmation/c/sup_def/sup_def/third_party/", */
@@ -33,9 +33,10 @@
                 "SUPDEF_ADDITIONAL_CHECKS=1",
                 "_FORTIFY_SOURCE=2",
                 "_LARGEFILE_SOURCE=1",
-                "_TIME_BITS=64"
+                "_TIME_BITS=64",
+                "STATIC_INITIALIZER_ALLOCATION=1"
             ],
-            "compilerPath": "/usr/local/bin/gcc",
+            "compilerPath": "/usr/bin/g++",
             "cStandard": "gnu23",
             "cppStandard": "gnu++23",
             "intelliSenseMode": "linux-gcc-x64",

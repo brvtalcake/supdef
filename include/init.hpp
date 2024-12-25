@@ -39,7 +39,7 @@ namespace supdef
             client(client_func_type f) noexcept;
             ~client();
 
-            void operator()() noexcept;
+            void operator()() const noexcept;
         
         private:
             client_func_type m_func;
@@ -48,16 +48,20 @@ namespace supdef
         init() = default;
         ~init() = default;
 
-        void register_init(client c) noexcept;
+        void register_init(const client& c) noexcept;
         void operator()() noexcept;
     
     protected:
-#if 0
-        using alloc_type = static_allocator<client, MAX_INIT_CLIENTS>;
+#if STATIC_INITIALIZER_ALLOCATION
+        using array_value_type = const client*;
+        using array_type = std::array<array_value_type, MAX_INIT_CLIENTS>;
+        static array_type s_init_array;
+        static size_t s_init_array_counter;
 #else
-        using alloc_type = std::allocator<client>;
+        using list_value_type = std::reference_wrapper<const client>;
+        using alloc_type = std::allocator<list_value_type>;
+        static std::list<list_value_type, alloc_type> s_init_list;
 #endif
-        static std::list<client, alloc_type> s_init_list;
     };
 
     extern init global_initializers;

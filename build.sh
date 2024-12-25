@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 files="$(find -L src -name '*.cpp' | xargs)"
 
 function is_defined()
@@ -36,7 +38,7 @@ function cmd()
 }
 
 define LIBS "icu-io" "libgrapheme"
-define CPPFLAGS "-Iinclude -D_GNU_SOURCE=1"
+define CPPFLAGS "-Iinclude -D_GNU_SOURCE=1 -DSTATIC_INITIALIZER_ALLOCATION=1"
 define CFLAGS "$(expand_libs cflags) -std=gnu++23 -Wall -Wextra -Og -ggdb3"
 define LDFLAGS "$(expand_libs libs) -L/usr/local/lib -lgrapheme"
 

@@ -2,23 +2,24 @@
 #define DIRECTIVES_HPP
 
 #include <types.hpp>
+#include <unicode.hpp>
 
 #include <variant>
 
 namespace supdef
 {
-    enum toplevel_token_kind
+    enum toplevel_node_kind
     {
-        TOPLVL_IMPORT,
-        TOPLVL_SUPDEF,
-        TOPLVL_RUNNABLE,
-        TOPLVL_EMBED,
-        TOPLVL_DUMP,
-        TOPLVL_END,
-        TOPLVL_CODE
+        TOPLVL_STRING,   // string
+        TOPLVL_IMPORT,   // @import "<file>"
+        TOPLVL_SUPDEF,   // @supdef <options> begin <name>
+        TOPLVL_EMBED,    // @embed "<file>"
+        TOPLVL_DUMP,     // @dump <number>
+        TOPLVL_END,      // @end
+        TOPLVL_CODE      // other code
     };
 
-    enum supdef_token_kind
+    enum supdef_node_kind
     {
         SD_LET,
         SD_IF,
@@ -29,39 +30,47 @@ namespace supdef
         SD_CODE
     };
 
-    enum function_token_kind
+    enum function_node_kind
     {
         FUNC_JOIN,
+        FUNC_SPLIT,
         FUNC_STR,
         FUNC_UNSTR,
         FUNC_LEN
     };
 
-    struct toplevel_token
+    struct toplevel_node
     {
-        toplevel_token_kind kind;
+        toplevel_node_kind kind;
         location loc;
-        const char* start;
-        const char* end;
+        icu::UnicodeString content;
     };
 
-    struct supdef_token
+    struct supdef_node
     {
-        supdef_token_kind kind;
+        supdef_node_kind kind;
         location loc;
-        const char* start;
-        const char* end;
+        icu::UnicodeString content;
     };
 
-    struct function_token
+    struct function_node
     {
-        function_token_kind kind;
+        function_node_kind kind;
         location loc;
-        const char* start;
-        const char* end;
+        icu::UnicodeString content;
     };
 
-    using token = std::variant<toplevel_token, supdef_token, function_token>;
+    using node = std::variant<toplevel_node, supdef_node, function_node>;
+
+    class tree
+    {
+    public:
+        tree() = default;
+        ~tree() = default;
+
+        void add_node(const node& n) noexcept;
+        void operator()() noexcept;
+    };
 }
 
 #endif
