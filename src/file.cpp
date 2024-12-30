@@ -4,11 +4,7 @@
 #include <file.hpp>
 #include <unicode.hpp>
 
-extern "C" {
-#include <grapheme.h>
-}
-
-#include <unicode/normalizer2.h>
+#include <simdutf.h>
 
 namespace stdx = std::experimental;
 /* std::vector<uint_least32_t> supdef::read_whole_file(const std::filesystem::path& filename)
@@ -35,7 +31,7 @@ namespace stdx = std::experimental;
 } */
 
 supdef::source_file::source_file(const std::filesystem::path& filename)
-    : m_data(), m_filename(filename)
+    : m_orig(), m_data(), m_filename(std::make_shared<const stdfs::path>(filename))
 {
     int fd = ::open(filename.c_str(), O_RDONLY);
     if (fd == -1)
@@ -64,26 +60,34 @@ supdef::source_file::source_file(const std::filesystem::path& filename)
 
     flock.release();
 
+    /* m_orig = simdutf::convert_utf8_to_utf32(fbuf, len); */
     // TODO: add support for more encoding types
-    m_data = icu::UnicodeString::fromUTF8(fbuf);
+    //char32_t* buf = new char32_t[len];
+    std::unique_ptr<char32_t[]> buf(new char32_t[len]);
+    size_t len32 = simdutf::convert_utf8_to_utf32(fbuf, len, buf.get());
+    if (len32 == 0)
+        throw std::runtime_error("failed to convert file to utf32, or empty file");
 
-    if (m_data.isBogus())
-        throw std::runtime_error("failed to convert file to UnicodeString");
-    
-    m_data = uninorm::normalize(m_data);
+    m_orig = std::u32string(buf.get(), len32);
+    m_data = m_orig;
 }
 
 supdef::source_file::~source_file()
 {
-    // nothing to do
+    // nothing to do a priori
 }
 
-const icu::UnicodeString& supdef::source_file::data() const noexcept
+std::u32string& supdef::source_file::data() noexcept
 {
     return m_data;
 }
 
-const std::filesystem::path& supdef::source_file::filename() const noexcept
+const std::u32string& supdef::source_file::original_data() const noexcept
+{
+    return m_orig;
+}
+
+std::shared_ptr<const stdfs::path> supdef::source_file::filename() const noexcept
 {
     return m_filename;
 }

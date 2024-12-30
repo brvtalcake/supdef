@@ -1,3 +1,34 @@
+enum toplevel_node_kind
+    {
+        TOPLVL_STRING,   // string
+        TOPLVL_IMPORT,   // @import "<file>"
+        TOPLVL_SUPDEF,   // @supdef <options> begin <name>
+        TOPLVL_EMBED,    // @embed "<file>"
+        TOPLVL_DUMP,     // @dump <number>
+        TOPLVL_END,      // @end
+        TOPLVL_CODE      // other code
+    };
+
+    enum supdef_node_kind
+    {
+        SD_LET,
+        SD_IF,
+        SD_ELIF,
+        SD_ELSE,
+        SD_ENDIF,
+        SD_FUNCTION,
+        SD_CODE
+    };
+
+    enum function_node_kind
+    {
+        FUNC_JOIN,
+        FUNC_SPLIT,
+        FUNC_STR,
+        FUNC_UNSTR,
+        FUNC_LEN
+    };
+
 @import "supdef.sd"
 
 @supdef begin test

@@ -1,6 +1,8 @@
 #ifndef MMAP_HPP
 #define MMAP_HPP
 
+#include <types.hpp>
+
 #include <filesystem>
 #include <cstdint>
 
@@ -14,9 +16,6 @@
 #else
 #error "Unsupported platform"
 #endif
-
-#include <unicode/ustream.h>
-#include <unicode/ustring.h>
 
 namespace supdef
 {
@@ -59,11 +58,14 @@ namespace supdef
         source_file(const std::filesystem::path& filename);
         ~source_file();
 
-        const icu::UnicodeString& data() const noexcept;
-        const std::filesystem::path& filename() const noexcept;
+        std::u32string& data() noexcept;
+        const std::u32string& original_data() const noexcept;
+        
+        std::shared_ptr<const stdfs::path> filename() const noexcept;
     private:
-        icu::UnicodeString m_data;
-        std::filesystem::path m_filename;
+        std::u32string m_orig;
+        std::u32string m_data;
+        std::shared_ptr<const stdfs::path> m_filename;
     };
 }
 

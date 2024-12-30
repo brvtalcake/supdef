@@ -29,23 +29,12 @@ int main(int argc, char const *argv[])
         return 1;
     }
 
-    supdef::source_file file(sourcefilepath);
-    std::cout << "File: "  << file.filename() << '\n';
-    std::cout << "Data:\n" << file.data() << '\n';
-
-    std::array<icu::UnicodeString, 5> import_test_strings = {
-        _("@import \"test1\""),
-        _("  @                 import \"test2\"            "),
-        _("  @                 import \"test2\"            \n"),
-        _("  @                 import\"test2\"            "),
-        _("  import \"test2\"")
-    };
-    std::cout << "Import test:\n";
-    for (const auto& str : import_test_strings)
-    {
-        std::cout << "String: " << str << '\n';
-        std::cout << "Matches: " << matches_import(str) << '\n';
-    }
+    supdef::parser parser(sourcefilepath);
+    parser.output_to("test-original.txt");
+    parser.do_stage1();
+    parser.output_to("test-stage1.txt");
+    parser.do_stage2();
+    parser.output_to("test-stage2.txt");
 
     return 0;
 }

@@ -1,0 +1,21 @@
+
+#define A(x) \
+    x(blah, "blah") \
+    /* */
+
+test\\
+
+test
+test\\
+a/*
+test
+
+/**/*/a
+//
+
+/* */
+"/**///\\\a\n\'//"
+
+
+/*/azdvazdv
+*/

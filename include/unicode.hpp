@@ -6,6 +6,12 @@
 #include <unicode/utypes.h>
 #include <unicode/ucnv.h>
 
+#include <stdexcept>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <concepts>
+
 namespace supdef
 {
     namespace unicode::normalizer
@@ -120,13 +126,52 @@ namespace supdef
             }
         }
 
+#undef  __ENABLEIF_2
+#undef  __ENABLEIF_1
+#define __ENABLEIF_2(type)          \
+    std::enable_if_t<               \
+        std::conjunction<           \
+            std::negation<          \
+                std::is_same<       \
+                    UChar32,        \
+                    uint32_t        \
+                >                   \
+            >,                      \
+            std::negation<          \
+                std::is_same<       \
+                    uint32_t,       \
+                    uint_least32_t  \
+                >                   \
+            >                       \
+        >::value,                   \
+        type                        \
+    >
+#define __ENABLEIF_1(type)  \
+    std::enable_if_t<       \
+        std::negation<      \
+            std::is_same<   \
+                UChar32,    \
+                uint32_t    \
+            >               \
+        >::value,           \
+        type                \
+    >
+
 #undef  __UNICODE_FN
-#define __UNICODE_FN(pred)                          \
-    static inline bool is_##pred(UChar32 c)         \
-    { return detail::select_unicode_fn(#pred)(c); } \
-    static inline bool is_##pred(                   \
-        const icu::UnicodeString& str,              \
-        int32_t index                               \
+#define __UNICODE_FN(pred)                              \
+    static inline bool is_##pred(UChar32 c)             \
+    { return detail::select_unicode_fn(#pred)(c); }     \
+    template <typename T = uint_least32_t>              \
+    static inline bool is_##pred(                       \
+        __ENABLEIF_2(T) c                               \
+    ) { return is_##pred(static_cast<UChar32>(c)); }    \
+    template <typename T = uint32_t>                    \
+    static inline bool is_##pred(                       \
+        __ENABLEIF_1(T) c                               \
+    ) { return is_##pred(static_cast<UChar32>(c)); }    \
+    static inline bool is_##pred(                       \
+        const icu::UnicodeString& str,                  \
+        int32_t index                                   \
     ) { return is_##pred(str.char32At(index)); }
 
         __UNICODE_FN(alnum)
@@ -154,6 +199,13 @@ namespace supdef
 }
 
 #undef  _
-#define _(...) ::supdef::uninorm::normalize(icu::UnicodeString::fromUTF8(__VA_ARGS__))
+#if !defined(UNICODE_STRING_SIMPLE) || 1
+    #define _(...) ::supdef::uninorm::normalize(icu::UnicodeString::fromUTF8(__VA_ARGS__))
+#else
+    #define _(...) UNICODE_STRING_SIMPLE(__VA_ARGS__)
+#endif
+
+#undef  FASTSTRING
+#define FASTSTRING(str) UNICODE_STRING_SIMPLE(str)
 
 #endif
