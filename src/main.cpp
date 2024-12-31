@@ -35,6 +35,9 @@ int main(int argc, char const *argv[])
     parser.output_to("test-stage1.txt");
     parser.do_stage2();
     parser.output_to("test-stage2.txt");
+    parser.do_stage3();
+    parser.output_to("test-stage3.txt");
+    parser.output_to("test-stage3-tokens.txt", supdef::parser::output_kind::tokens);
 
     return 0;
 }

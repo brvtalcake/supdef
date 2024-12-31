@@ -4,6 +4,8 @@
 #include <types.hpp>
 #include <directives.hpp>
 #include <file.hpp>
+#include <unicode.hpp>
+#include <tokenizer.hpp>
 
 #include <filesystem>
 #include <vector>
@@ -279,12 +281,21 @@ namespace supdef
         void do_stage1();
         void do_stage2();
 #endif
+        void do_stage3();
 
-        void output_to(std::ostream& os);
-        void output_to(const std::filesystem::path& filename);
+        enum output_kind
+        {
+            text = 1,
+            tokens = 2,
+            ast = 4
+        };
+
+        void output_to(std::ostream& os, output_kind kind = text);
+        void output_to(const std::filesystem::path& filename, output_kind kind = text);
 
     private:
         source_file m_file;
+        std::vector<token> m_tokens;
     };
 }
 

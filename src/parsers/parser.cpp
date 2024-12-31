@@ -241,27 +241,68 @@ end:
     }
 }
 
-void supdef::parser::output_to(std::ostream& os)
+void supdef::parser::do_stage3()
 {
-#if 0
-    const auto& data = m_file.data();
-    const auto& dataptr = data.data();
-    const auto& datalen = data.size();
-
-    size_t required_length = simdutf::utf8_length_from_utf32(dataptr, datalen);
-    std::unique_ptr<char[]> buf(new char[required_length]);
-    size_t result = simdutf::convert_valid_utf32_to_utf8(dataptr, datalen, buf.get());
-    if (result == 0)
-        throw std::runtime_error("failed to convert utf32 to utf8");
-
-    os.write(buf.get(), required_length);
-#else
-    os << format(m_file.data());
-#endif
+    tokenizer tkn(m_file.data());
+    for (auto&& tok : tkn.tokenize())
+        m_tokens.push_back(tok);
 }
 
-void supdef::parser::output_to(const stdfs::path& filename)
+#include <magic_enum.hpp>
+
+void supdef::parser::output_to(std::ostream& os, output_kind kind)
+{
+    if (kind & output_kind::text)
+        os << format(m_file.data());
+    if (kind & output_kind::tokens)
+    {
+        auto enum_name_as_string = [](token& e) static constexpr noexcept -> std::string_view
+        {
+            using namespace std::string_view_literals;
+            std::string_view ret = e.keyword.has_value() ?
+                magic_enum::enum_name(e.keyword.value()) :
+                "none"sv;
+            return ret;
+        };
+        auto fmt_data = [](std::optional<std::u32string>& data) static constexpr noexcept -> std::string
+        {
+            using namespace std::string_literals;
+            return data.has_value()  ?
+                format(data.value()) :
+                "none"s;
+        };
+        auto fmt_whitespace = [](token& e) static constexpr noexcept -> std::string
+        {
+            using namespace std::string_literals;
+            assert(e.data.has_value() && e.data.value().size() == 1);
+            auto echar = static_cast<uint32_t>(e.data.value().at(0));
+            return e.kind == token_kind::newline                ?
+                "<newline>: U+"s + std::format("{:04X}", echar) :
+                "<horizontal whitespace>: U+"s + std::format("{:04X}", echar);
+        };
+        auto fmt = [fmt_data, fmt_whitespace](token& e) constexpr noexcept -> std::string
+        {
+            if (e.kind == token_kind::newline || e.kind == token_kind::horizontal_whitespace)
+                return fmt_whitespace(e);
+            else
+                return fmt_data(e.data);
+        };
+        size_t i = 0;
+        for (auto&& tok : m_tokens)
+            os << "<token n°" << i++ << ">\n"
+               << "\tkind:\n\t\t" << magic_enum::enum_name(tok.kind) << '\n'
+               << "\tdata:\n\t\t" << fmt(tok) << '\n'
+               << "\tkeyword:\n\t\t" << enum_name_as_string(tok) << '\n';
+    }
+    if (kind & output_kind::ast)
+    {
+        // TODO
+    }
+    os << std::flush;
+}
+
+void supdef::parser::output_to(const stdfs::path& filename, output_kind kind)
 {
     std::ofstream file(filename);
-    output_to(file);
+    output_to(file, kind);
 }

@@ -5,15 +5,48 @@
 #include <unicode/normalizer2.h>
 #include <unicode/utypes.h>
 #include <unicode/ucnv.h>
+#include <unicode/uchar.h>
+#include <unicode/udata.h>
 
 #include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
 #include <concepts>
+#include <cmath>
+#include <tgmath.h>
 
 namespace supdef
 {
+    namespace unicode
+    {
+        template <typename T>
+        static inline T numeric_value(UChar32 c)
+        {
+            if constexpr (std::floating_point<T>)
+                return u_getNumericValue(c);
+            else
+            {
+                auto val = u_getNumericValue(c);
+                if (val == U_NO_NUMERIC_VALUE)
+                    return 0;
+                if constexpr (std::integral<T>)
+                    return static_cast<T>(std::llround(val));
+                else
+                    return static_cast<T>(val);
+            }
+        }
+        template <typename T>
+        static inline T numeric_value(const icu::UnicodeString& str, int32_t index)
+        {
+            return numeric_value<T>(str.char32At(index));
+        }
+        template <typename T>
+        static inline T numeric_value(char32_t c)
+        {
+            return numeric_value<T>(static_cast<UChar32>(c));
+        }
+    }
     namespace unicode::normalizer
     {
         static inline const icu::Normalizer2* get_instance(
@@ -170,6 +203,9 @@ namespace supdef
         __ENABLEIF_1(T) c                               \
     ) { return is_##pred(static_cast<UChar32>(c)); }    \
     static inline bool is_##pred(                       \
+        char32_t c                                      \
+    ) { return is_##pred(static_cast<UChar32>(c)); }    \
+    static inline bool is_##pred(                       \
         const icu::UnicodeString& str,                  \
         int32_t index                                   \
     ) { return is_##pred(str.char32At(index)); }
@@ -188,6 +224,26 @@ namespace supdef
         __UNICODE_FN(title)
         __UNICODE_FN(upper)
         __UNICODE_FN(xdigit)
+
+        static inline bool is_odigit(UChar32 c)
+        {
+            return ::supdef::unicode::category::is_digit(c) &&
+                   ::supdef::unicode::numeric_value<uint8_t>(c) < 8;
+        }
+        template <typename T = uint_least32_t>
+        static inline bool is_odigit(__ENABLEIF_2(T) c)
+        {
+            return is_odigit(static_cast<UChar32>(c));
+        }
+        template <typename T = uint32_t>
+        static inline bool is_odigit(__ENABLEIF_1(T) c)
+        {
+            return is_odigit(static_cast<UChar32>(c));
+        }
+        static inline bool is_odigit(char32_t c)
+        {
+            return is_odigit(static_cast<UChar32>(c));
+        }
     }
 
     namespace unicat = unicode::category;

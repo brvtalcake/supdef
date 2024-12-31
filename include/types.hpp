@@ -26,28 +26,6 @@ namespace supdef
         size_t off;
         size_t len;
     };
-
-    enum token_type
-    {
-        TOK_LPAREN, TOK_RPAREN,               // ( )
-        TOK_LBRACE, TOK_RBRACE,               // { }
-        TOK_LBRACKET, TOK_RBRACKET,           // [ ]
-        //TOK_CCOMMENT_START, TOK_CCOMMENT_END, // /* */
-        //TOK_CPPCOMMENT,                       // //
-        TOK_CHARLIT, TOK_STRINGLIT,           // ' ' " "
-        TOK_DOLLAR,                           // $
-        TOK_SUPDEF,                           // @\s*supdef\s+<options>\s+begin\s+<name>
-        TOK_IDENTIFIER,                       // [a-zA-Z_][a-zA-Z0-9_]*
-        TOK_OTHER,                            // Any other token
-        TOK_EOF                               // End of file
-    };
-
-    struct token
-    {
-        token_type type;
-        std::reference_wrapper<const icu::UnicodeString> origtxt;
-        location loc;
-    };
 }
 
 #endif
