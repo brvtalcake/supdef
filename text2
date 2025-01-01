@@ -1,0 +1,5 @@
+@supdef testé
+    @let a = @len($1)
+    @let b = @len($2)
+#define SUM @math($a + $b)
+@end

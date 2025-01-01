@@ -27,6 +27,9 @@ namespace
 
         if (end == std::u32string::npos)
             end = datalen;
+        
+        if (str.empty())
+            return "";
 
         size_t required_length = simdutf::utf8_length_from_utf32(datastart, end - start);
         std::unique_ptr<char[]> buf(new char[required_length]);

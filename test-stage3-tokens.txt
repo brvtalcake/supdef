@@ -413,23 +413,23 @@
 		supdef
 <token n°59>
 	kind:
-		identifier
+		horizontal_whitespace
 	data:
-		esté
+		<horizontal whitespace>: U+0020
 	keyword:
 		none
 <token n°60>
 	kind:
-		newline
+		identifier
 	data:
-		<newline>: U+000A
+		testé
 	keyword:
 		none
 <token n°61>
 	kind:
-		horizontal_whitespace
+		newline
 	data:
-		<horizontal whitespace>: U+0020
+		<newline>: U+000A
 	keyword:
 		none
 <token n°62>
@@ -455,37 +455,37 @@
 		none
 <token n°65>
 	kind:
-		at
+		horizontal_whitespace
 	data:
-		@
+		<horizontal whitespace>: U+0020
 	keyword:
 		none
 <token n°66>
 	kind:
-		keyword
-	data:
-		let
-	keyword:
-		let
-<token n°67>
-	kind:
 		at
 	data:
 		@
 	keyword:
 		none
-<token n°68>
+<token n°67>
 	kind:
 		keyword
 	data:
-		len
+		let
 	keyword:
-		len
-<token n°69>
+		let
+<token n°68>
 	kind:
 		horizontal_whitespace
 	data:
 		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°69>
+	kind:
+		identifier
+	data:
+		a
 	keyword:
 		none
 <token n°70>
@@ -497,9 +497,9 @@
 		none
 <token n°71>
 	kind:
-		horizontal_whitespace
+		equals
 	data:
-		<horizontal whitespace>: U+0020
+		=
 	keyword:
 		none
 <token n°72>
@@ -520,49 +520,49 @@
 	kind:
 		keyword
 	data:
-		let
+		len
 	keyword:
-		let
+		len
 <token n°75>
 	kind:
-		at
+		lparen
 	data:
-		@
+		(
 	keyword:
 		none
 <token n°76>
 	kind:
-		keyword
+		dollar
 	data:
-		len
+		$
 	keyword:
-		len
+		none
 <token n°77>
 	kind:
-		other
+		integer_literal
 	data:
-		#
+		1
 	keyword:
 		none
 <token n°78>
 	kind:
-		identifier
+		rparen
 	data:
-		define
+		)
 	keyword:
 		none
 <token n°79>
 	kind:
-		horizontal_whitespace
+		newline
 	data:
-		<horizontal whitespace>: U+0020
+		<newline>: U+000A
 	keyword:
 		none
 <token n°80>
 	kind:
-		identifier
+		horizontal_whitespace
 	data:
-		SUM
+		<horizontal whitespace>: U+0020
 	keyword:
 		none
 <token n°81>
@@ -574,37 +574,37 @@
 		none
 <token n°82>
 	kind:
-		at
+		horizontal_whitespace
 	data:
-		@
+		<horizontal whitespace>: U+0020
 	keyword:
 		none
 <token n°83>
-	kind:
-		keyword
-	data:
-		math
-	keyword:
-		math
-<token n°84>
-	kind:
-		plus
-	data:
-		+
-	keyword:
-		none
-<token n°85>
 	kind:
 		horizontal_whitespace
 	data:
 		<horizontal whitespace>: U+0020
 	keyword:
 		none
+<token n°84>
+	kind:
+		at
+	data:
+		@
+	keyword:
+		none
+<token n°85>
+	kind:
+		keyword
+	data:
+		let
+	keyword:
+		let
 <token n°86>
 	kind:
-		dollar
+		horizontal_whitespace
 	data:
-		$
+		<horizontal whitespace>: U+0020
 	keyword:
 		none
 <token n°87>
@@ -616,33 +616,348 @@
 		none
 <token n°88>
 	kind:
-		rparen
+		horizontal_whitespace
 	data:
-		)
+		<horizontal whitespace>: U+0020
 	keyword:
 		none
 <token n°89>
 	kind:
-		newline
+		equals
 	data:
-		<newline>: U+000A
+		=
 	keyword:
 		none
 <token n°90>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°91>
 	kind:
 		at
 	data:
 		@
 	keyword:
 		none
-<token n°91>
+<token n°92>
+	kind:
+		keyword
+	data:
+		len
+	keyword:
+		len
+<token n°93>
+	kind:
+		lparen
+	data:
+		(
+	keyword:
+		none
+<token n°94>
+	kind:
+		dollar
+	data:
+		$
+	keyword:
+		none
+<token n°95>
+	kind:
+		integer_literal
+	data:
+		2
+	keyword:
+		none
+<token n°96>
+	kind:
+		rparen
+	data:
+		)
+	keyword:
+		none
+<token n°97>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°98>
+	kind:
+		other
+	data:
+		#
+	keyword:
+		none
+<token n°99>
+	kind:
+		identifier
+	data:
+		define
+	keyword:
+		none
+<token n°100>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°101>
+	kind:
+		identifier
+	data:
+		SUM
+	keyword:
+		none
+<token n°102>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°103>
+	kind:
+		at
+	data:
+		@
+	keyword:
+		none
+<token n°104>
+	kind:
+		keyword
+	data:
+		math
+	keyword:
+		math
+<token n°105>
+	kind:
+		lparen
+	data:
+		(
+	keyword:
+		none
+<token n°106>
+	kind:
+		dollar
+	data:
+		$
+	keyword:
+		none
+<token n°107>
+	kind:
+		identifier
+	data:
+		a
+	keyword:
+		none
+<token n°108>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°109>
+	kind:
+		plus
+	data:
+		+
+	keyword:
+		none
+<token n°110>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°111>
+	kind:
+		dollar
+	data:
+		$
+	keyword:
+		none
+<token n°112>
+	kind:
+		identifier
+	data:
+		b
+	keyword:
+		none
+<token n°113>
+	kind:
+		rparen
+	data:
+		)
+	keyword:
+		none
+<token n°114>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°115>
+	kind:
+		at
+	data:
+		@
+	keyword:
+		none
+<token n°116>
 	kind:
 		keyword
 	data:
 		end
 	keyword:
 		end
-<token n°92>
+<token n°117>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°118>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°119>
+	kind:
+		integer_literal
+	data:
+		1234567890
+	keyword:
+		none
+<token n°120>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°121>
+	kind:
+		octal_integer_literal
+	data:
+		0
+	keyword:
+		none
+<token n°122>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°123>
+	kind:
+		octal_integer_literal
+	data:
+		01
+	keyword:
+		none
+<token n°124>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°125>
+	kind:
+		octal_integer_literal
+	data:
+		012
+	keyword:
+		none
+<token n°126>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°127>
+	kind:
+		hex_integer_literal
+	data:
+		
+	keyword:
+		none
+<token n°128>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°129>
+	kind:
+		hex_integer_literal
+	data:
+		1
+	keyword:
+		none
+<token n°130>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°131>
+	kind:
+		hex_integer_literal
+	data:
+		12
+	keyword:
+		none
+<token n°132>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°133>
+	kind:
+		hex_integer_literal
+	data:
+		123
+	keyword:
+		none
+<token n°134>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°135>
+	kind:
+		binary_integer_literal
+	data:
+		1011
+	keyword:
+		none
+<token n°136>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°137>
 	kind:
 		eof
 	data:

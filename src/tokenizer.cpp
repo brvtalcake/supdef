@@ -189,6 +189,7 @@ namespace
 
         if (*s.next == U'0' && s.next + 1 != s.end)
         {
+            auto cpy = s.next;
             if (s.next[1] == U'x')
             {
                 s.next += 2;
@@ -196,7 +197,7 @@ namespace
                     ++s.next;
 
                 s.kind = supdef::token_kind::hex_integer_literal;
-                s.data = std::u32string(s.next - 2, s.next);
+                s.data = std::u32string(cpy + 2, s.next);
                 s.keyword = std::nullopt;
                 return std::ref(s);
             }
@@ -207,7 +208,7 @@ namespace
                     ++s.next;
 
                 s.kind = supdef::token_kind::binary_integer_literal;
-                s.data = std::u32string(s.next - 2, s.next);
+                s.data = std::u32string(cpy + 2, s.next);
                 s.keyword = std::nullopt;
                 return std::ref(s);
             }
@@ -216,8 +217,16 @@ namespace
                 while (s.next != s.end && supdef::unicat::is_odigit(*s.next))
                     ++s.next;
 
-                s.kind = supdef::token_kind::octal_integer_literal;
-                s.data = std::u32string(s.next - 2, s.next);
+                if (cpy != s.next - 1)
+                {
+                    s.kind = supdef::token_kind::octal_integer_literal;
+                    s.data = std::u32string(cpy, s.next);
+                    s.keyword = std::nullopt;
+                    return std::ref(s);
+                }
+                
+                s.kind = supdef::token_kind::integer_literal;
+                s.data = std::u32string(1, U'0');
                 s.keyword = std::nullopt;
                 return std::ref(s);
             }
@@ -225,6 +234,8 @@ namespace
 
         if (supdef::unicat::is_digit(*s.next))
         {
+            auto cpy = s.next;
+
             while (s.next != s.end && supdef::unicat::is_digit(*s.next))
                 ++s.next;
 
@@ -244,13 +255,13 @@ namespace
                 }
 
                 s.kind = supdef::token_kind::floating_literal;
-                s.data = std::u32string(s.next - 2, s.next);
+                s.data = std::u32string(cpy, s.next);
                 s.keyword = std::nullopt;
                 return std::ref(s);
             }
 
             s.kind = supdef::token_kind::integer_literal;
-            s.data = std::u32string(s.next - 2, s.next);
+            s.data = std::u32string(cpy, s.next);
             s.keyword = std::nullopt;
             return std::ref(s);
         }
@@ -338,6 +349,7 @@ namespace
         };
         size_t index = 0;
 
+        auto beginning = s.next;
         while (s.next != s.end && index < max_keyword_length)
         {
             for (size_t i = 0; i < keyword_count; ++i)
@@ -370,6 +382,7 @@ namespace
                     }
                 }
 
+                s.next = beginning + max_size_matched;
                 s.kind = supdef::token_kind::keyword;
                 s.data = keywords[max_size_matched_index].kw;
                 s.keyword = keywords[max_size_matched_index].kw_kind;

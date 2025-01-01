@@ -21,3 +21,13 @@ test
     @let b = @len($2)
 #define SUM @math($a + $b)
 @end
+
+1234567890
+0
+01
+012
+0x
+0x1
+0x12
+0x123
+0b1011
