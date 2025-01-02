@@ -1,16 +1,26 @@
 #include <file.hpp>
 #include <unicode.hpp>
 #include <parser.hpp>
+#include <tokenizer.hpp>
+#include <detail/globals.hpp>
 
 #include <bits/stdc++.h>
 
 #include <boost/filesystem.hpp>
 
+#include <magic_enum.hpp>
+
 #include <simdutf.h>
+
+GLOBAL_GETTER_DECL(
+    std::vector<std::shared_ptr<const stdfs::path>>,
+    already_processed_files
+);
 
 supdef::parser::parser(const stdfs::path& filename)
     : m_file(filename)
 {
+    ::supdef::globals::get_already_processed_files().push_back(m_file.filename());
 }
 
 supdef::parser::~parser()
@@ -244,14 +254,193 @@ end:
     }
 }
 
+namespace
+{
+    struct token_walker
+    {
+    private:
+        using iterator = std::vector<::supdef::token>::const_iterator;
+    public:
+        token_walker(const std::vector<::supdef::token>& tokens)
+            : m_tokens(std::addressof(tokens))
+            , m_index(0)
+        {
+        }
+        const auto& next()
+        {
+            return m_tokens->at(m_index++);
+        }
+        const auto& peek()
+        {
+            return m_tokens->at(m_index);
+        }
+        bool has_next() const
+        {
+            return m_index < m_tokens->size();
+        }
+
+        bool accept(::supdef::token_kind kind)
+        {
+            if (m_index >= m_tokens->size())
+                return false;
+            if (m_tokens->at(m_index).kind == kind)
+            {
+                ++m_index;
+                return true;
+            }
+            return false;
+        }
+
+        bool expect(::supdef::token_kind kind)
+        {
+            if (m_index >= m_tokens->size())
+                return false;
+            if (m_tokens->at(m_index).kind == kind)
+            {
+                ++m_index;
+                return true;
+            }
+            using namespace std::string_literals;
+            // TODO: better error reporting
+            printer::error(
+                "unexpected token: got "s
+                + magic_enum::enum_name(m_tokens->at(m_index).kind).data()
+                + " (" + format(m_tokens->at(m_index).data.value()) + ")"
+                + " instead of " + magic_enum::enum_name(kind).data()
+            );
+            return false;
+        }
+
+        void remove(iterator it)
+        {
+            // if the iterator is before the current index, decrement the index
+            if (it < m_tokens->begin() + m_index)
+                --m_index;
+            m_tokens->erase(it);
+        }
+        void remove(iterator first, iterator last)
+        {
+            assert(first <= last);
+            // decrement the index by the number of elements removed before the current index
+            iterator index_it = m_tokens->begin() + m_index;
+            if (first < index_it)
+                m_index -= std::min(
+                    std::distance(first, index_it),
+                    std::distance(first, last)
+                );
+            m_tokens->erase(first, last);
+        }
+
+        size_t skip_whitespaces(bool skip_newlines = false)
+        {
+            size_t count = 0;
+            while (m_index < m_tokens->size())
+            {
+                if (m_tokens->at(m_index).kind == ::supdef::token_kind::horizontal_whitespace)
+                {
+                    ++m_index;
+                    ++count;
+                }
+                else if (skip_newlines && m_tokens->at(m_index).kind == ::supdef::token_kind::newline)
+                {
+                    ++m_index;
+                    ++count;
+                }
+                else
+                    break;
+            }
+            return count;
+        }
+
+        size_t get_index() const
+        {
+            return m_index;
+        }
+        void set_index(size_t index)
+        {
+            m_index = index;
+        }
+
+        iterator get_iterator_at(size_t index = -1)
+        {
+            if (index == -1)
+                index = m_index;
+            return m_tokens->begin() + index;
+        }
+
+    private:
+        std::vector<::supdef::token>* m_tokens;
+        size_t m_index;
+    };
+
+    // @ import "path"
+    static std::vector<stdfs::path> find_imports(std::vector<::supdef::token>& tokens)
+    {
+        std::vector<stdfs::path> imports;
+        token_walker walker(tokens);
+        while (walker.has_next())
+        {
+            if (!walker.accept(::supdef::token_kind::at))
+                continue;
+            auto at_index = walker.get_index() - 1;
+            walker.skip_whitespaces();
+            if (!walker.accept(::supdef::token_kind::keyword))
+                continue;
+            if (walker.peek().keyword.value() != ::supdef::keyword_kind::import)
+                continue;
+            if (!walker.skip_whitespaces(false))
+                supdef::printer::warning(
+                    "expected at least one whitespace after import keyword"
+                );
+            if (!walker.expect(::supdef::token_kind::string_literal))
+                continue;
+            auto import_end_index = walker.get_index();
+            imports.emplace_back(
+                format(walker.peek().data.value())
+            );
+            walker.remove(
+                walker.get_iterator_at(at_index),
+                walker.get_iterator_at(import_end_index)
+            );
+        }
+        return imports;
+    }
+}
+
 void supdef::parser::do_stage3()
 {
     tokenizer tkn(m_file.data());
     for (auto&& tok : tkn.tokenize())
         m_tokens.push_back(tok);
-}
 
-#include <magic_enum.hpp>
+    std::vector imports = find_imports(m_tokens);
+    auto already_processed = [this](const stdfs::path& p)
+    {
+        auto& files = ::supdef::globals::get_already_processed_files();
+        return std::find_if(
+            files.begin(), files.end(),
+            [&p](const auto& x) { return *x == p; }
+        ) != files.end();
+    };
+    auto canon = [](const stdfs::path& p)
+    { return stdfs::canonical(p); };
+    for (auto&& import : imports)
+    {
+        auto canon_import = canon(import);
+        if (already_processed(canon_import))
+            continue;
+        parser p(canon_import);
+        p.do_stage1();
+        p.do_stage2();
+        p.do_stage3();
+        m_imported_parsers.insert(p);
+    }
+
+    // TODO: find and parse supdef's
+    // TODO: find and parse runnable's
+    // TODO: find and parse embed's
+    // TODO: find and parse dump's
+}
 
 void supdef::parser::output_to(std::ostream& os, output_kind kind)
 {

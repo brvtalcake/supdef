@@ -9,6 +9,7 @@
 
 #include <filesystem>
 #include <vector>
+#include <set>
 #include <utility>
 #include <generator>
 
@@ -270,6 +271,20 @@ namespace supdef
 
     class parser
     {
+        struct parser_compare
+        {
+        protected:
+            using ret_type = decltype(std::declval<stdfs::path>() <=> std::declval<stdfs::path>());
+
+        public:
+            ret_type operator()(const parser& lhs, const parser& rhs) const
+            {
+                return *lhs.m_file.filename() <=> *rhs.m_file.filename();
+            }
+        };
+
+        friend parser_compare;
+
     public:
         parser(const stdfs::path& filename);
         ~parser();
@@ -296,6 +311,7 @@ namespace supdef
     private:
         source_file m_file;
         std::vector<token> m_tokens;
+        std::set<parser, parser_compare> m_imported_parsers;
     };
 }
 

@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <cstddef>
 #include <cstdint>
+#include <boost/multiprecision/gmp.hpp>
 
 #include <experimental/scope>
 
@@ -26,6 +27,9 @@ namespace supdef
         size_t off;
         size_t len;
     };
+
+    using bigint = boost::multiprecision::mpz_int;
+    using bigfloat = boost::multiprecision::mpf_float;
 }
 
 #endif

@@ -136,30 +136,30 @@ namespace
     {
         if (*s.next == U'\'')
         {
-            char32_t buffer[4];
-            buffer[0] = *s.next++;
+            char32_t buffer[2];
+            s.next++;
             if (*s.next == U'\\')
             {
+                buffer[0] = *s.next++;
                 buffer[1] = *s.next++;
-                buffer[2] = *s.next++;
-                buffer[3] = *s.next++;
-                if (buffer[3] != U'\'')
+                if (*s.next != U'\'')
                     std::unreachable(); // already handled when removing comments
 
+                s.next++;
                 s.kind = supdef::token_kind::char_literal;
-                s.data = std::u32string(buffer, 4);
+                s.data = std::u32string(buffer, 2);
                 s.keyword = std::nullopt;
                 return std::ref(s);
             }
             else
             {
-                buffer[1] = *s.next++;
-                buffer[2] = *s.next++;
-                if (buffer[2] != U'\'')
+                buffer[0] = *s.next++;
+                if (*s.next != U'\'')
                     std::unreachable(); // already handled when removing comments
 
+                s.next++;
                 s.kind = supdef::token_kind::char_literal;
-                s.data = std::u32string(buffer, 3);
+                s.data = std::u32string(buffer, 1);
                 s.keyword = std::nullopt;
                 return std::ref(s);
             }
@@ -168,7 +168,7 @@ namespace
         if (*s.next == U'"')
         {
             std::u32string buffer;
-            buffer.push_back(*s.next++);
+            s.next++;
             while (*s.next != U'"')
             {
                 if (*s.next == U'\\')
@@ -179,8 +179,8 @@ namespace
                 else
                     buffer.push_back(*s.next++);
             }
-            buffer.push_back(*s.next++);
 
+            s.next++;
             s.kind = supdef::token_kind::string_literal;
             s.data = buffer;
             s.keyword = std::nullopt;

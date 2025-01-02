@@ -10,7 +10,7 @@
 
 namespace stdfs = std::filesystem;
 
-extern bool matches_import(const icu::UnicodeString& str);
+
 
 int main(int argc, char const *argv[])
 {

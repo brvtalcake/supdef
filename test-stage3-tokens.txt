@@ -847,7 +847,7 @@
 		none
 <token n°121>
 	kind:
-		octal_integer_literal
+		integer_literal
 	data:
 		0
 	keyword:

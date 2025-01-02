@@ -39,7 +39,8 @@ function cmd()
 
 define LIBS "icu-io" "libgrapheme" "simdutf"
 define CPPFLAGS "-Iinclude -D_GNU_SOURCE=1 -DSTATIC_INITIALIZER_ALLOCATION=1"
-define CFLAGS "$(expand_libs cflags) -std=gnu++23 -Wall -Wextra -Og -ggdb3"
+define CFLAGS "$(expand_libs cflags) -std=gnu++23 -Wall -Wextra -O3 -march=native -mtune=native -flto"
+#define CFLAGS "$(expand_libs cflags) -std=gnu++23 -Wall -Wextra -Og -ggdb3"
 #define CFLAGS "$(expand_libs cflags) -std=gnu++23 -Wall -Wextra -O0 -ggdb3"
 define LDFLAGS "$(expand_libs libs) -L/usr/local/lib -lgrapheme -lboost_filesystem"
 
