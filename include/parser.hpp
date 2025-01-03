@@ -273,13 +273,26 @@ namespace supdef
     {
         struct parser_compare
         {
-        protected:
             using ret_type = decltype(std::declval<stdfs::path>() <=> std::declval<stdfs::path>());
 
-        public:
-            ret_type operator()(const parser& lhs, const parser& rhs) const
+            enum class op
             {
-                return *lhs.m_file.filename() <=> *rhs.m_file.filename();
+                less,
+                greater,
+                equal
+            };
+        protected:
+            static bool do_less(const stdfs::path& lhs, const stdfs::path& rhs)
+            {
+                return lhs < rhs;
+            }
+
+        public:
+            static bool operator()(const parser& lhs, const parser& rhs, op op = op::less)
+            {
+                if (op == op::less)
+                    return do_less(*lhs.m_file.filename(), *rhs.m_file.filename());
+                std::unreachable(); // not implemented
             }
         };
 
@@ -308,6 +321,10 @@ namespace supdef
         void output_to(std::ostream& os, output_kind kind = text);
         void output_to(const std::filesystem::path& filename, output_kind kind = text);
 
+        parser_compare::ret_type operator<=>(const parser& rhs) const
+        {
+            return *m_file.filename() <=> *rhs.m_file.filename();
+        }
     private:
         source_file m_file;
         std::vector<token> m_tokens;

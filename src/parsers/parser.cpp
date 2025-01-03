@@ -261,7 +261,7 @@ namespace
     private:
         using iterator = std::vector<::supdef::token>::const_iterator;
     public:
-        token_walker(const std::vector<::supdef::token>& tokens)
+        token_walker(std::vector<::supdef::token>& tokens)
             : m_tokens(std::addressof(tokens))
             , m_index(0)
         {
@@ -302,7 +302,7 @@ namespace
             }
             using namespace std::string_literals;
             // TODO: better error reporting
-            printer::error(
+            ::supdef::printer::error(
                 "unexpected token: got "s
                 + magic_enum::enum_name(m_tokens->at(m_index).kind).data()
                 + " (" + format(m_tokens->at(m_index).data.value()) + ")"
