@@ -194,58 +194,48 @@ static decltype(auto) parse_cmdline(int argc, char const* const* argv)
 
 #else
 
+struct cmdline
+{
+    enum output
+    {
+        text   = 1 << 0,
+        tokens = 1 << 1,
+        ast    = 1 << 2,
+        all    = text
+               | tokens
+               | ast
+    };
+    stdfs::path input_file;
+    stdfs::path output_file;
+    std::string progname;
+    unsigned stop_after_stage;
+    output output_kind;
+    int verbosity;
+};
+
+static ::cmdline supdef_cmdline;
+
 static argparse::ArgumentParser build_cmdline_parser(int argc, char const* const* argv)
 {
-    argparse::ArgumentParser argparser("supdef");
-    argparser.add_argument("input-file")
-        .help("input file")
+    supdef_cmdline.progname = argv[0];
+    
+    argparse::ArgumentParser stage_opts("stage options");
+    auto& stage_aliases = stage_opts.add_mutually_exclusive_group();
+    stage_aliases.add_argument("-s", "--stage")
+        .help("output processed content after specified stage")
         .nargs(1)
+        .scan<'u', unsigned>()
+        .default_value(3)
+        .choices(1U, 2U, 3U)
         ;
-    argparser.add_argument("-h", "--help")
-        .help("produce help message")
-        .default_value(false)
-        .implicit_value(true)
+    stage_aliases.add_argument("--stage1")
+        .help("alias for -s|--stage 1")
+        .action([](const std::string&) { return 1; })
         ;
-    argparser.add_argument("-v", "--version")
-        .help("print version")
-        .default_value(false)
-        .implicit_value(true)
-        ;
-    argparser.add_argument("--stage1")
-        .help("run stage 1")
-        .default_value(false)
-        .implicit_value(true)
-        ;
-    argparser.add_argument("--stage2")
-        .help("run stage 2")
-        .default_value(false)
-        .implicit_value(true)
-        ;
-    argparser.add_argument("--stage3")
-        .help("run stage 3")
-        .default_value(false)
-        .implicit_value(true)
-        ;
-    argparser.add_argument("--all")
-        .help("run all stages")
-        .default_value(false)
-        .implicit_value(true)
-        ;
-    argparser.add_argument("-o", "--output-file")
-        .help("output file")
-        .default_value("output.txt")
-        ;
-    argparser.add_argument("--tokens")
-        .help("output tokens")
-        .default_value(false)
-        .implicit_value(true)
-        ;
-    argparser.add_argument("--ast")
-        .help("output ast")
-        .default_value(false)
-        .implicit_value(true)
-        ;
-    return argparser;
+    argparse::ArgumentParser output_opts("output options");
+    argparse::ArgumentParser misc_opts("miscellaneous options");
+    
+    argparse::ArgumentParser argparser(supdef_cmdline.progname, SUPDEF_VERSION_STRING);
 }
 #endif
 
