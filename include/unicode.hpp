@@ -264,4 +264,62 @@ namespace supdef
 #undef  FASTSTRING
 #define FASTSTRING(str) UNICODE_STRING_SIMPLE(str)
 
+#include <simdutf.h>
+
+namespace supdef
+{
+    namespace mkliterals
+    {
+        namespace impl
+        {
+            static constexpr char32_t operator""_u32_char_(const char* str, size_t length)
+            {
+                using namespace simdutf;
+                size_t required_length = utf32_length_from_utf8(str, length);
+                assert(required_length == 1);
+                char32_t ret;
+                convert_valid_utf8_to_utf32(str, length, &ret);
+                return ret;
+            }
+
+            static constexpr std::u32string operator""_u32_str_(const char* str, size_t length)
+            {
+                using namespace simdutf;
+                size_t required_length = utf32_length_from_utf8(str, length);
+                std::u32string ret(required_length, U'\0');
+                convert_valid_utf8_to_utf32(str, length, ret.data());
+                return ret;
+            }
+        }
+    }
+}
+
+using namespace supdef::mkliterals::impl;
+
+#undef  UPPCONCAT
+#undef  UPPCONCAT_IMPL
+#define UPPCONCAT(tok1, ...) UPPCONCAT_IMPL(tok1, __VA_ARGS__)
+#define UPPCONCAT_IMPL(tok1, ...) tok1##__VA_ARGS__
+
+#undef  UPPSTRINGIZE
+#undef  UPPSTRINGIZE_IMPL
+#define UPPSTRINGIZE(...) UPPSTRINGIZE_IMPL(__VA_ARGS__)
+#define UPPSTRINGIZE_IMPL(...) #__VA_ARGS__
+
+#undef  UCHR
+#define UCHR(...) UPPCONCAT(UPPSTRINGIZE(__VA_ARGS__), _u32_char_)
+
+#undef  USTR
+#define USTR(...) UPPCONCAT(UPPSTRINGIZE(__VA_ARGS__), _u32_str_)
+
+/*
+ * USTR(Hello," " world!)       ---> "Hello,\" \" world!"_u32_str_
+ * USTR(Cela coûte environ 10€) ---> "Cela coûte environ 10€"_u32_str_
+ * USTR(أنا أحب البيتزا)             ---> "أنا أحب البيتزا"_u32_str_
+ */
+
+/*
+ * UCHR(ب)  ---> "ب"_u32_char_
+ * UCHR(🩎)  ---> "🩎"_u32_char_
+ */
 #endif

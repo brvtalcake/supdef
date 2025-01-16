@@ -26,3 +26,7 @@
             SUPDEF_VERSION_PATCH    \
         )
 #endif
+
+#ifndef SUPDEF_MAX_PARSING_PHASE
+    #define SUPDEF_MAX_PARSING_PHASE 3U
+#endif

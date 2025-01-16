@@ -1,29 +1,463 @@
 
-#define A(x)      x(blah, "blah")       
-
-test\ 
-test
-test\ a */a
- 
-
- 
-"/**///\\\a\n\'//"
-
-
- 
+@import "text"
 
 @supdef testé
     @let a = @len($1)
     @let b = @len($2)
 #define SUM @math($a + $b)
 @end
-
-1234567890
-0
-01
-012
-0x
-0x1
-0x12
-0x123
-0b1011
+<token n°0>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°1>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°2>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°3>
+	kind:
+		at
+	data:
+		@
+	keyword:
+		none
+<token n°4>
+	kind:
+		keyword
+	data:
+		supdef
+	keyword:
+		supdef
+<token n°5>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°6>
+	kind:
+		identifier
+	data:
+		testé
+	keyword:
+		none
+<token n°7>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°8>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°9>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°10>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°11>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°12>
+	kind:
+		at
+	data:
+		@
+	keyword:
+		none
+<token n°13>
+	kind:
+		keyword
+	data:
+		let
+	keyword:
+		let
+<token n°14>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°15>
+	kind:
+		identifier
+	data:
+		a
+	keyword:
+		none
+<token n°16>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°17>
+	kind:
+		equals
+	data:
+		=
+	keyword:
+		none
+<token n°18>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°19>
+	kind:
+		at
+	data:
+		@
+	keyword:
+		none
+<token n°20>
+	kind:
+		keyword
+	data:
+		len
+	keyword:
+		len
+<token n°21>
+	kind:
+		lparen
+	data:
+		(
+	keyword:
+		none
+<token n°22>
+	kind:
+		dollar
+	data:
+		$
+	keyword:
+		none
+<token n°23>
+	kind:
+		integer_literal
+	data:
+		1
+	keyword:
+		none
+<token n°24>
+	kind:
+		rparen
+	data:
+		)
+	keyword:
+		none
+<token n°25>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°26>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°27>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°28>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°29>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°30>
+	kind:
+		at
+	data:
+		@
+	keyword:
+		none
+<token n°31>
+	kind:
+		keyword
+	data:
+		let
+	keyword:
+		let
+<token n°32>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°33>
+	kind:
+		identifier
+	data:
+		b
+	keyword:
+		none
+<token n°34>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°35>
+	kind:
+		equals
+	data:
+		=
+	keyword:
+		none
+<token n°36>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°37>
+	kind:
+		at
+	data:
+		@
+	keyword:
+		none
+<token n°38>
+	kind:
+		keyword
+	data:
+		len
+	keyword:
+		len
+<token n°39>
+	kind:
+		lparen
+	data:
+		(
+	keyword:
+		none
+<token n°40>
+	kind:
+		dollar
+	data:
+		$
+	keyword:
+		none
+<token n°41>
+	kind:
+		integer_literal
+	data:
+		2
+	keyword:
+		none
+<token n°42>
+	kind:
+		rparen
+	data:
+		)
+	keyword:
+		none
+<token n°43>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°44>
+	kind:
+		other
+	data:
+		#
+	keyword:
+		none
+<token n°45>
+	kind:
+		identifier
+	data:
+		define
+	keyword:
+		none
+<token n°46>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°47>
+	kind:
+		identifier
+	data:
+		SUM
+	keyword:
+		none
+<token n°48>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°49>
+	kind:
+		at
+	data:
+		@
+	keyword:
+		none
+<token n°50>
+	kind:
+		keyword
+	data:
+		math
+	keyword:
+		math
+<token n°51>
+	kind:
+		lparen
+	data:
+		(
+	keyword:
+		none
+<token n°52>
+	kind:
+		dollar
+	data:
+		$
+	keyword:
+		none
+<token n°53>
+	kind:
+		identifier
+	data:
+		a
+	keyword:
+		none
+<token n°54>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°55>
+	kind:
+		plus
+	data:
+		+
+	keyword:
+		none
+<token n°56>
+	kind:
+		horizontal_whitespace
+	data:
+		<horizontal whitespace>: U+0020
+	keyword:
+		none
+<token n°57>
+	kind:
+		dollar
+	data:
+		$
+	keyword:
+		none
+<token n°58>
+	kind:
+		identifier
+	data:
+		b
+	keyword:
+		none
+<token n°59>
+	kind:
+		rparen
+	data:
+		)
+	keyword:
+		none
+<token n°60>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°61>
+	kind:
+		at
+	data:
+		@
+	keyword:
+		none
+<token n°62>
+	kind:
+		keyword
+	data:
+		end
+	keyword:
+		end
+<token n°63>
+	kind:
+		newline
+	data:
+		<newline>: U+000A
+	keyword:
+		none
+<token n°64>
+	kind:
+		eof
+	data:
+		none
+	keyword:
+		none

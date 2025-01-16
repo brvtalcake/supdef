@@ -24,6 +24,11 @@
 #include <unicode/ustream.h>
 #include <unicode/regex.h>
 
+#include <boost/pfr.hpp>
+
+#include <magic_enum.hpp>
+#include <magic_enum_flags.hpp>
+
 #include <argparse/argparse.hpp>
 
 namespace stdfs = std::filesystem;
@@ -209,33 +214,128 @@ struct cmdline
     stdfs::path output_file;
     std::string progname;
     unsigned stop_after_stage;
+#if 1
     output output_kind;
+#else
+    std::underlying_type_t<output> output_kind;
+#endif
     int verbosity;
 };
 
-static ::cmdline supdef_cmdline;
+static ::cmdline supdef_cmdline{
+    .input_file = "",
+    .output_file = "",
+    .progname = "",
+    .stop_after_stage = 3U,
+    .output_kind = ::cmdline::text,
+    .verbosity = 0
+};
 
-static argparse::ArgumentParser build_cmdline_parser(int argc, char const* const* argv)
+static void parse_cmdline(int argc, char const* const* argv)
 {
     supdef_cmdline.progname = argv[0];
-    
-    argparse::ArgumentParser stage_opts("stage options");
-    auto& stage_aliases = stage_opts.add_mutually_exclusive_group();
-    stage_aliases.add_argument("-s", "--stage")
+    argparse::ArgumentParser progargs(supdef_cmdline.progname, SUPDEF_VERSION_STRING, argparse::default_arguments::help);
+    progargs.add_description("supdef - a simple preprocessor for (and written in) C/C++");
+
+    progargs.add_argument("-V", "--version")
+        .help("print version info and exit")
+        .action([](const std::string& value) -> void {
+            std::cout << "supdef version " << SUPDEF_VERSION_STRING << '\n';
+            ::exit(EXIT_SUCCESS);
+        })
+        .append()
+        .flag()
+        .nargs(0)
+        ;
+    progargs.add_argument("-v", "--verbose")
+        .help("increase verbosity")
+        .action([](const std::string& value) -> void { ++supdef_cmdline.verbosity; })
+        .append()
+        .flag()
+        .nargs(0)
+        ;
+    progargs.add_argument("-q", "--quiet")
+        .help("decrease verbosity")
+        .action([](const std::string& value) -> void { --supdef_cmdline.verbosity; })
+        .append()
+        .flag()
+        .nargs(0)
+        ;
+    progargs.add_argument("-s", "--stage")
         .help("output processed content after specified stage")
         .nargs(1)
         .scan<'u', unsigned>()
-        .default_value(3)
-        .choices(1U, 2U, 3U)
+        .metavar("<stage-number>")
         ;
-    stage_aliases.add_argument("--stage1")
-        .help("alias for -s|--stage 1")
-        .action([](const std::string&) { return 1; })
+    progargs.add_argument("-k", "--tokens")
+        .help("output tokens")
+        .flag()
+        .nargs(0)
         ;
-    argparse::ArgumentParser output_opts("output options");
-    argparse::ArgumentParser misc_opts("miscellaneous options");
-    
-    argparse::ArgumentParser argparser(supdef_cmdline.progname, SUPDEF_VERSION_STRING);
+    progargs.add_argument("-t", "--ast")
+        .help("output ast")
+        .flag()
+        .nargs(0)
+        ;
+    progargs.add_argument("-a", "--all")
+        .help("output all")
+        .flag()
+        .nargs(0)
+        ;
+    progargs.add_argument("-o", "--output-file")
+        .help("output file")
+        .nargs(1)
+        .required()
+        .metavar("<output-file>")
+        ;
+    progargs.add_argument("input-file")
+        .help("input file")
+        .nargs(1)
+        .metavar("<input-file>")
+        ;
+
+    try
+    {
+        progargs.parse_args(argc, argv);
+    }
+    catch (const std::runtime_error& e)
+    {
+        using namespace std::string_literals;
+        supdef::printer::fatal("failed to parse command line arguments: "s + e.what());
+        std::cerr << progargs;
+        ::exit(EXIT_FAILURE);
+    }
+
+    // required arguments
+    supdef_cmdline.output_file = progargs.get<std::string>("-o");
+    supdef_cmdline.input_file = progargs.get<std::string>("input-file");
+
+    // optional arguments
+    if (progargs.is_used("-s"))
+    {
+        supdef_cmdline.stop_after_stage = progargs.get<unsigned>("-s");
+        if (supdef_cmdline.stop_after_stage > SUPDEF_MAX_PARSING_PHASE || supdef_cmdline.stop_after_stage == 0U)
+        {
+            using namespace std::string_literals;
+            supdef::printer::fatal("invalid stage number: "s + std::to_string(supdef_cmdline.stop_after_stage) + " (must be 1, 2, or 3)");
+            ::exit(EXIT_FAILURE);
+        }
+    }
+    else
+        supdef_cmdline.stop_after_stage = SUPDEF_MAX_PARSING_PHASE;
+
+    if (progargs.is_used("-k"))
+        supdef_cmdline.output_kind = cmdline::output(
+            supdef_cmdline.output_kind | ::cmdline::tokens
+        );
+    if (progargs.is_used("-t"))
+        supdef_cmdline.output_kind = cmdline::output(
+            supdef_cmdline.output_kind | ::cmdline::ast
+        );
+    if (progargs.is_used("-a"))
+        supdef_cmdline.output_kind = cmdline::output(
+            supdef_cmdline.output_kind | ::cmdline::all
+        );
 }
 #endif
 
@@ -284,17 +384,63 @@ static int old_main(int argc, char const* argv[])
 
 static int real_main(int argc, char const* argv[])
 {
-    argparse::ArgumentParser argparser = build_cmdline_parser(argc, argv);
+    parse_cmdline(argc, argv);
+
+    if (supdef_cmdline.verbosity > 2)
+    {
+        std::array field_names = boost::pfr::names_as_array<cmdline>();
+        size_t field_counter = 0;
+        boost::pfr::for_each_field(
+            supdef_cmdline,
+            [&field_names, &field_counter](const auto& field)
+            {
+                if constexpr (std::is_enum_v<std::decay_t<decltype(field)>>)
+                    supdef::printer::info(std::string(field_names[field_counter].data()) + ": " + magic_enum::enum_flags_name(field));
+                else if constexpr (requires { { field.to_string() } -> std::convertible_to<std::string>; })
+                    supdef::printer::info(std::string(field_names[field_counter].data()) + ": " + field.to_string());
+                else if constexpr (requires { { std::to_string(field) } -> std::convertible_to<std::string>; })
+                    supdef::printer::info(std::string(field_names[field_counter].data()) + ": " + std::to_string(field));
+                else if constexpr (requires { { field.string() } -> std::convertible_to<std::string>; })
+                    supdef::printer::info(std::string(field_names[field_counter].data()) + ": " + field.string());
+                else
+                    supdef::printer::info(std::string(field_names[field_counter].data()) + ": " + field);
+                ++field_counter;
+            }
+        );
+    }
+
     std::error_code ec;
-    stdfs::path sourcefilepath = stdfs::canonical(// TODO
-    "");
+    stdfs::path sourcefilepath = stdfs::canonical(supdef_cmdline.input_file, ec);
     if (ec)
     {
-        std::cerr << "failed to get canonical path: " << ec.message() << '\n';
+        supdef::printer::fatal("failed to get canonical path: " + ec.message());
         return 1;
     }
 
     supdef::parser parser(sourcefilepath);
-
+    auto outflags = supdef::parser::output_kind::text;
+    outflags = supdef::parser::output_kind(
+        outflags | (supdef_cmdline.output_kind & cmdline::tokens ? supdef::parser::output_kind::tokens : 0)
+    );
+    outflags = supdef::parser::output_kind(
+        outflags | (supdef_cmdline.output_kind & cmdline::ast ? supdef::parser::output_kind::ast : 0)
+    );
+    outflags = supdef::parser::output_kind(
+        outflags | (supdef_cmdline.output_kind & cmdline::all ? supdef::parser::output_kind::all : 0)
+    );
+    parser.do_stage1();
+    if (supdef_cmdline.stop_after_stage == 1U)
+    {
+        parser.output_to(supdef_cmdline.output_file, outflags);
+        return 0;
+    }
+    parser.do_stage2();
+    if (supdef_cmdline.stop_after_stage == 2U)
+    {
+        parser.output_to(supdef_cmdline.output_file, outflags);
+        return 0;
+    }
+    parser.do_stage3();
+    parser.output_to(supdef_cmdline.output_file, outflags);
     return 0;
 }

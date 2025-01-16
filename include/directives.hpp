@@ -16,14 +16,7 @@
 
 namespace supdef
 {
-    class ast_node
-    {
-    public:
-        virtual ~ast_node() = default;
-        virtual std::u32string to_string() const = 0;
-    };
-
-    // TODO
+    
 }
 
 #endif

@@ -12,6 +12,16 @@
 #include <set>
 #include <utility>
 #include <generator>
+#include <string>
+#include <optional>
+#include <memory>
+#include <iostream>
+#include <fstream>
+#include <algorithm>
+#include <functional>
+#include <stdexcept>
+#include <map>
+#include <variant>
 
 #include <unicode/ustream.h>
 #include <unicode/unistr.h>
@@ -299,6 +309,14 @@ namespace supdef
         friend parser_compare;
 
     public:
+        struct registered_supdef
+        {
+            enum options
+            { none };
+            std::vector<std::u32string> lines;
+            options opts;
+        };
+
         parser(const stdfs::path& filename);
         ~parser();
 
@@ -315,11 +333,16 @@ namespace supdef
         {
             text = 1,
             tokens = 2,
-            ast = 4
+            ast = 4,
+            all = text
+                | tokens
+                | ast
         };
 
         void output_to(std::ostream& os, output_kind kind = text);
         void output_to(const std::filesystem::path& filename, output_kind kind = text);
+
+        std::optional<registered_supdef> get_supdef(const std::u32string& name, bool recurse = true) const noexcept;
 
         parser_compare::ret_type operator<=>(const parser& rhs) const
         {
@@ -329,6 +352,7 @@ namespace supdef
         source_file m_file;
         std::vector<token> m_tokens;
         std::set<parser, parser_compare> m_imported_parsers;
+        std::multimap<std::u32string, registered_supdef> m_supdefs;
     };
 }
 

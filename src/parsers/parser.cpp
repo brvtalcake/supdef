@@ -256,6 +256,14 @@ end:
 
 namespace
 {
+    using registered_supdef = ::supdef::parser::registered_supdef;
+
+    static registered_supdef::options parse_supdef_options(const std::u32string& str)
+    {
+        // for now, no options are supported
+        return registered_supdef::options::none;
+    }
+
     struct token_walker
     {
     private:
@@ -274,6 +282,14 @@ namespace
         {
             return m_tokens->at(m_index);
         }
+        const auto& peek_at(size_t index)
+        {
+            return m_tokens->at(index);
+        }
+        const auto& peek_at(iterator it)
+        {
+            return *it;
+        }
         bool has_next() const
         {
             return m_index < m_tokens->size();
@@ -291,6 +307,13 @@ namespace
             return false;
         }
 
+        bool accept_no_move(::supdef::token_kind kind)
+        {
+            if (m_index >= m_tokens->size())
+                return false;
+            return m_tokens->at(m_index).kind == kind;
+        }
+
         bool expect(::supdef::token_kind kind)
         {
             if (m_index >= m_tokens->size())
@@ -301,7 +324,10 @@ namespace
                 return true;
             }
             using namespace std::string_literals;
-            // TODO: better error reporting
+            // TODO: better error reporting, for example:
+            //    - accept a message to print
+            //    - accept a severity level
+            //    - print default message below when no message is provided
             ::supdef::printer::error(
                 "unexpected token: got "s
                 + magic_enum::enum_name(m_tokens->at(m_index).kind).data()
@@ -373,30 +399,48 @@ namespace
         size_t m_index;
     };
 
+    /*
+     * TODO: instead of just `continue`ing everywhere, we should sometimes
+     *       emit a warning or an error, depending on the situation.
+     */
+
     // @ import "path"
     static std::vector<stdfs::path> find_imports(std::vector<::supdef::token>& tokens)
     {
         std::vector<stdfs::path> imports;
         token_walker walker(tokens);
+        bool first_token = true;
         while (walker.has_next())
         {
+            if (first_token)
+            {
+                first_token = false;
+                goto no_check_needed;
+            }
+            if (!walker.accept(::supdef::token_kind::newline))
+            {
+                walker.next();
+                continue;
+            }
+no_check_needed:
+            walker.skip_whitespaces(true);
             if (!walker.accept(::supdef::token_kind::at))
                 continue;
             auto at_index = walker.get_index() - 1;
             walker.skip_whitespaces();
-            if (!walker.accept(::supdef::token_kind::keyword))
+            auto tok = walker.peek();
+            if (!walker.accept(::supdef::token_kind::keyword) || tok.keyword != ::supdef::keyword_kind::import)
                 continue;
-            if (walker.peek().keyword.value() != ::supdef::keyword_kind::import)
-                continue;
-            if (!walker.skip_whitespaces(false))
+            if (!walker.skip_whitespaces())
                 supdef::printer::warning(
                     "expected at least one whitespace after import keyword"
                 );
+            auto potential_path = walker.peek();
             if (!walker.expect(::supdef::token_kind::string_literal))
                 continue;
             auto import_end_index = walker.get_index();
             imports.emplace_back(
-                format(walker.peek().data.value())
+                format(potential_path.data.value())
             );
             walker.remove(
                 walker.get_iterator_at(at_index),
@@ -404,6 +448,73 @@ namespace
             );
         }
         return imports;
+    }
+
+    // @ supdef <options> begin <name>
+    // ...
+    // @ end
+    // <options> ::= ::supdef::token_kind::identifier*
+    // <name> ::= ::supdef::token_kind::identifier
+    static std::multimap<registered_supdef> find_supdefs(std::vector<::supdef::token>& tokens)
+    {
+        std::multimap<registered_supdef> supdefs;
+        token_walker walker(tokens);
+        bool first_token = true;
+        while (walker.has_next())
+        {
+            registered_supdef sd;
+            std::u32string name;
+            if (first_token)
+            {
+                first_token = false;
+                goto no_check_needed;
+            }
+            if (!walker.accept(::supdef::token_kind::newline))
+            {
+                walker.next();
+                continue;
+            }
+no_check_needed:
+            walker.skip_whitespaces(true);
+            if (!walker.accept(::supdef::token_kind::at))
+                continue;
+            auto at_index = walker.get_index() - 1;
+            walker.skip_whitespaces();
+            if (!walker.accept_no_move(::supdef::token_kind::keyword) || walker.next().keyword != ::supdef::keyword_kind::supdef)
+                continue;
+            walker.skip_whitespaces();
+            if (!walker.accept_no_move(::supdef::token_kind::identifier) && !walker.accept_no_move(::supdef::token_kind::keyword))
+                continue;
+            auto begin_or_opts = walker.peek();
+            if (begin_or_opts.keyword.value_or(::supdef::keyword_kind::unknown) == ::supdef::keyword_kind::begin)
+                sd.opts = registered_supdef::options::none;
+            else
+            {
+                sd.opts = parse_supdef_options(format(begin_or_opts.data.value()));
+                walker.skip_whitespaces();
+                if (!walker.accept_no_move(::supdef::token_kind::keyword) || walker.next().keyword != ::supdef::keyword_kind::begin)
+                    continue;
+            }
+            walker.skip_whitespaces();
+            if (!walker.accept_no_move(::supdef::token_kind::identifier))
+                continue;
+            name = walker.next().data.value();
+            walker.skip_whitespaces();
+            while (true)
+                sd.lines.push_back(parse_supdef_line(walker));
+            walker.skip_whitespaces(true);
+            if (!walker.accept(::supdef::token_kind::at))
+                continue;
+            walker.skip_whitespaces();
+            if (!walker.accept_no_move(::supdef::token_kind::keyword) || walker.next().keyword != ::supdef::keyword_kind::end)
+                continue;
+            walker.remove(
+                walker.get_iterator_at(at_index),
+                walker.get_iterator_at(walker.get_index())
+            );
+            supdefs.emplace(name, std::move(sd));
+        }
+        return supdefs;
     }
 }
 
@@ -427,6 +538,7 @@ void supdef::parser::do_stage3()
     for (auto&& import : imports)
     {
         auto canon_import = canon(import);
+        std::cout << "importing: " << canon_import.string() << '\n';
         if (already_processed(canon_import))
             continue;
         parser p(canon_import);
@@ -437,6 +549,8 @@ void supdef::parser::do_stage3()
     }
 
     // TODO: find and parse supdef's
+    std::multimap supdefs = find_supdefs(m_tokens);
+    this->m_supdefs.merge(supdefs);
     // TODO: find and parse runnable's
     // TODO: find and parse embed's
     // TODO: find and parse dump's
@@ -445,6 +559,7 @@ void supdef::parser::do_stage3()
 void supdef::parser::output_to(std::ostream& os, output_kind kind)
 {
     if (kind & output_kind::text)
+        // TODO: output different things depending on current stage
         os << format(m_file.data());
     if (kind & output_kind::tokens)
     {

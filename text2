@@ -1,3 +1,6 @@
+
+@import "text"
+
 @supdef testé
     @let a = @len($1)
     @let b = @len($2)

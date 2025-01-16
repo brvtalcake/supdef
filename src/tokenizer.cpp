@@ -277,7 +277,7 @@ namespace
     embed, dump, let, if_,      \
     elseif, else_, endif,       \
     for_, end, join, split,     \
-    str, unstr, len, math
+    str, unstr, len, math, begin
 
 #undef  __KWD_LIST
 #define __KWD_LIST(sep) \
@@ -298,7 +298,8 @@ namespace
     str sep()           \
     unstr sep()         \
     len sep()           \
-    math
+    math sep()          \
+    begin
 
 #undef  __KWD_FOREACH
 #define __KWD_FOREACH(macro, ...)   \
@@ -326,8 +327,8 @@ namespace
         ), true                                         \
     }
 
-        static_assert(BOOST_PP_SEQ_SIZE(BOOST_PP_VARIADIC_TO_SEQ(__KWD_LIST(BOOST_PP_COMMA))) == 18, "keyword list size mismatch");
-        static_assert(BOOST_PP_SEQ_SIZE(BOOST_PP_VARIADIC_TO_SEQ(__KWD_KIND_LIST)) == 18, "keyword list size mismatch");
+        static_assert(BOOST_PP_SEQ_SIZE(BOOST_PP_VARIADIC_TO_SEQ(__KWD_LIST(BOOST_PP_COMMA))) == int(::supdef::keyword_kind::unknown), "keyword list size mismatch");
+        static_assert(BOOST_PP_SEQ_SIZE(BOOST_PP_VARIADIC_TO_SEQ(__KWD_KIND_LIST)) == int(::supdef::keyword_kind::unknown), "keyword list size mismatch");
 
         static constexpr const std::u32string_view keywords_strs[] = {
             __KWD_FOREACH(__KWD_USTRINGIZE_EACH)

@@ -58,11 +58,16 @@ namespace supdef
 
     enum class keyword_kind
     {
+        __unused = -1,
+
         supdef, import, runnable,
         embed, dump, let, if_,
         elseif, else_, endif,
         for_, end, join, split,
-        str, unstr, len, math
+        str, unstr, len, math,
+        begin,
+
+        unknown
     };
 
     struct token
