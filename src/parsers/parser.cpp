@@ -17,8 +17,17 @@ GLOBAL_GETTER_DECL(
     already_processed_files
 );
 
+static constexpr uint64_t seed_with_time()
+{
+    auto now = std::chrono::system_clock::now();
+    auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(now);
+    auto epoch = now_ms.time_since_epoch();
+    auto value = std::chrono::duration_cast<std::chrono::milliseconds>(epoch);
+    return reinterpret_cast<uint64_t>(value.count());
+}
+
 supdef::parser::parser(const stdfs::path& filename)
-    : m_file(filename)
+    : m_file(filename), m_tokens(), m_imported_parsers(), m_supdefs(32, ::supdef::detail::xxhash<std::u32string, 64>(seed_with_time()))
 {
     ::supdef::globals::get_already_processed_files().push_back(m_file.filename());
 }
@@ -254,14 +263,19 @@ end:
     }
 }
 
+using supdef_map_type =
+    std::unordered_multimap<
+        std::u32string,
+        ::supdef::parser::registered_supdef,
+        ::supdef::detail::xxhash<std::u32string, 64>
+    >;
+
 namespace
 {
-    using registered_supdef = ::supdef::parser::registered_supdef;
-
-    static registered_supdef::options parse_supdef_options(const std::u32string& str)
+    static ::supdef::parser::registered_supdef::options parse_supdef_options(const std::u32string& str)
     {
         // for now, no options are supported
-        return registered_supdef::options::none;
+        return ::supdef::parser::registered_supdef::options::none;
     }
 
     struct token_walker
@@ -450,19 +464,33 @@ no_check_needed:
         return imports;
     }
 
+    static inline std::optional<std::u32string> parse_supdef_line(token_walker& walker)
+    {
+        if (!walker.accept(::supdef::token_kind::newline))
+            return std::nullopt;
+        walker.skip_whitespaces(true);
+        auto tok = walker.next();
+        if (tok.kind == ::supdef::token_kind::at)
+        {
+            walker.skip_whitespaces();
+            if (!walker.accept_no_move(::supdef::token_kind::keyword))
+                return walker.next(). // TODO: error
+        }
+    }
+
     // @ supdef <options> begin <name>
     // ...
     // @ end
     // <options> ::= ::supdef::token_kind::identifier*
     // <name> ::= ::supdef::token_kind::identifier
-    static std::multimap<registered_supdef> find_supdefs(std::vector<::supdef::token>& tokens)
+    static supdef_map_type find_supdefs(std::vector<::supdef::token>& tokens)
     {
-        std::multimap<registered_supdef> supdefs;
+        supdef_map_type supdefs;
         token_walker walker(tokens);
         bool first_token = true;
         while (walker.has_next())
         {
-            registered_supdef sd;
+            ::supdef::parser::registered_supdef sd;
             std::u32string name;
             if (first_token)
             {
@@ -487,7 +515,7 @@ no_check_needed:
                 continue;
             auto begin_or_opts = walker.peek();
             if (begin_or_opts.keyword.value_or(::supdef::keyword_kind::unknown) == ::supdef::keyword_kind::begin)
-                sd.opts = registered_supdef::options::none;
+                sd.opts = ::supdef::parser::registered_supdef::options::none;
             else
             {
                 sd.opts = parse_supdef_options(format(begin_or_opts.data.value()));
@@ -501,7 +529,12 @@ no_check_needed:
             name = walker.next().data.value();
             walker.skip_whitespaces();
             while (true)
-                sd.lines.push_back(parse_supdef_line(walker));
+            {
+                auto line = parse_supdef_line(walker);
+                if (!line.has_value())
+                    break;
+                sd.lines.push_back(line);
+            }
             walker.skip_whitespaces(true);
             if (!walker.accept(::supdef::token_kind::at))
                 continue;
@@ -549,8 +582,8 @@ void supdef::parser::do_stage3()
     }
 
     // TODO: find and parse supdef's
-    std::multimap supdefs = find_supdefs(m_tokens);
-    this->m_supdefs.merge(supdefs);
+    std::unordered_multimap supdefs = find_supdefs(m_tokens);
+    this->m_supdefs.merge(std::move(supdefs));
     // TODO: find and parse runnable's
     // TODO: find and parse embed's
     // TODO: find and parse dump's

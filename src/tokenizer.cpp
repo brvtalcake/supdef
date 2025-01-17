@@ -274,10 +274,12 @@ namespace
 #undef  __KWD_KIND_LIST
 #define __KWD_KIND_LIST         \
     supdef, import, runnable,   \
-    embed, dump, let, if_,      \
+    embed, dump, set, if_,      \
     elseif, else_, endif,       \
     for_, end, join, split,     \
-    str, unstr, len, math, begin
+    str, unstr, len, math,      \
+    begin, unset, foreach,      \
+    foreachi, raw
 
 #undef  __KWD_LIST
 #define __KWD_LIST(sep) \
@@ -286,7 +288,7 @@ namespace
     runnable sep()      \
     embed sep()         \
     dump sep()          \
-    let sep()           \
+    set sep()           \
     if sep()            \
     elseif sep()        \
     else sep()          \
@@ -299,7 +301,11 @@ namespace
     unstr sep()         \
     len sep()           \
     math sep()          \
-    begin
+    begin sep()         \
+    unset sep()         \
+    foreach sep()       \
+    foreachi sep()      \
+    raw
 
 #undef  __KWD_FOREACH
 #define __KWD_FOREACH(macro, ...)   \

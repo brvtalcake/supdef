@@ -61,11 +61,12 @@ namespace supdef
         __unused = -1,
 
         supdef, import, runnable,
-        embed, dump, let, if_,
+        embed, dump, set, if_,
         elseif, else_, endif,
         for_, end, join, split,
         str, unstr, len, math,
-        begin,
+        begin, unset, foreach,
+        foreachi, raw,
 
         unknown
     };

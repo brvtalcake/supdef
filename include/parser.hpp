@@ -6,6 +6,7 @@
 #include <file.hpp>
 #include <unicode.hpp>
 #include <tokenizer.hpp>
+#include <detail/xxhash.hpp>
 
 #include <filesystem>
 #include <vector>
@@ -313,7 +314,12 @@ namespace supdef
         {
             enum options
             { none };
-            std::vector<std::u32string> lines;
+#if 0
+            mdvector<::supdef::token> lines;
+#else
+            std::vector<std::vector<::supdef::token>> lines;
+#endif
+            std::u32string name;
             options opts;
         };
 
@@ -349,10 +355,16 @@ namespace supdef
             return *m_file.filename() <=> *rhs.m_file.filename();
         }
     private:
+        using supdef_map_type =
+            std::unordered_multimap<
+                std::u32string,
+                ::supdef::parser::registered_supdef,
+                ::supdef::detail::xxhash<std::u32string, 64>
+            >;
         source_file m_file;
         std::vector<token> m_tokens;
         std::set<parser, parser_compare> m_imported_parsers;
-        std::multimap<std::u32string, registered_supdef> m_supdefs;
+        supdef_map_type m_supdefs;
     };
 }
 
