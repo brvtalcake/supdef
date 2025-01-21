@@ -464,25 +464,42 @@ no_check_needed:
         return imports;
     }
 
-    static inline std::optional<std::u32string> parse_supdef_line(token_walker& walker)
+    static inline std::optional<std::vector<::supdef::token>> parse_supdef_line(token_walker& walker)
     {
+        std::vector<::supdef::token> line;
         if (!walker.accept(::supdef::token_kind::newline))
             return std::nullopt;
         walker.skip_whitespaces(true);
         auto tok = walker.next();
         if (tok.kind == ::supdef::token_kind::at)
         {
-            walker.skip_whitespaces();
-            if (!walker.accept_no_move(::supdef::token_kind::keyword))
-                return walker.next(). // TODO: error
+            if (walker.accept_no_move(::supdef::token_kind::keyword))
+            {
+                if (walker.peek().keyword == ::supdef::keyword_kind::end)
+                    return std::nullopt;
+            }
         }
+        line.push_back(tok);
+        //line.push_back(walker.peek());
+        while (walker.has_next())
+        {
+            if (!walker.accept_no_move(::supdef::token_kind::newline))
+                break;
+            line.push_back(walker.next());
+        }
+        return line;
     }
 
     // @ supdef <options> begin <name>
-    // ...
+    // <supdef-body>
     // @ end
     // <options> ::= ::supdef::token_kind::identifier*
     // <name> ::= ::supdef::token_kind::identifier
+    // <supdef-body> ::= <supdef-line>*
+    // <supdef-line> ::= <let-expresion> | <if-expression> | <for-expression> | <while-expression> | <expression>
+    // <let-expression> ::= @let <identifier> = <expression>
+    // <if-expression> ::= @if <expression> begin <expression> end
+    
     static supdef_map_type find_supdefs(std::vector<::supdef::token>& tokens)
     {
         supdef_map_type supdefs;
