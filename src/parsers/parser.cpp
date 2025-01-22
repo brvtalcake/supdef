@@ -59,26 +59,214 @@ namespace
         return std::string(buf.get(), result);
     }
 
-    static void splice_lines(std::u32string& str)
+}
+
+void ::supdef::parser::do_stage1()
+{
+    auto& data = m_file.data();
+    
+    tokenizer tk(data);
+    for (auto&& token : tk.tokenize())
+        m_tokens.push_back(token);
+}
+
+void ::supdef::parser::do_stage2()
+{
+    auto& orig_data = m_file.original_data();
+    // splice lines
+    for (size_t i = 0; i < m_tokens.size(); ++i)
+    {
+        auto&& token = m_tokens.at(i);
+        if (token.kind == token_kind::backslash)
+        {
+            if (i + 1 == m_tokens.size())
+            {
+                printer::error(
+                    "unexpected end of file while parsing backslash character",
+                    token, orig_data, &format
+                );
+                return;
+            }
+            auto&& next_token = m_tokens.at(i + 1);
+            if (next_token.kind == token_kind::newline)
+            {
+                auto replacement = token;
+                replacement.kind = token_kind::horizontal_whitespace;
+                replacement.data = U" ";
+                m_tokens.at(i) = replacement;
+                m_tokens.erase(m_tokens.begin() + i + 1);
+            }
+            else
+            {
+                printer::warning(
+                    "backslash character outside of string or character literal",
+                    token, orig_data, &format
+                );
+            }
+        }
+    }
+}
+
+void ::supdef::parser::do_stage3()
+{
+    auto& orig_data = m_file.original_data();
+    for (size_t i = 0; i < m_tokens.size(); ++i)
+    {
+        auto&& token = m_tokens.at(i);
+        switch (token.kind)
+        {
+        case token_kind::inline_comment: {
+            size_t j = i + 1;
+            while (j < m_tokens.size() && m_tokens.at(j).kind != token_kind::newline)
+                ++j;
+            m_tokens.erase(m_tokens.begin() + i, m_tokens.begin() + j);
+        } break;
+        case token_kind::multiline_comment: {
+            m_tokens.erase(m_tokens.begin() + i);
+        } break;
+        default:
+            break;
+        }
+    }
+}
+
+namespace
+{
+    static constexpr auto enum_name_as_string(const ::supdef::token& e) noexcept -> std::string_view
+    {
+        using namespace std::string_view_literals;
+        std::string_view ret = e.keyword.has_value() ?
+            magic_enum::enum_name(e.keyword.value()) :
+            "none"sv;
+        return ret;
+    };
+    static constexpr auto fmt_data(const std::optional<std::u32string>& data) noexcept -> std::string
     {
         using namespace std::string_literals;
-        static const auto bs_string = U"\\\n"s;
-        static const auto bs_replacement = U" "s;
-        std::vector<size_t> found;
-        while (true)
+        return data.has_value()  ?
+            format(data.value()) :
+            "none"s;
+    };
+    static constexpr auto fmt_whitespace(const ::supdef::token& e) noexcept -> std::string
+    {
+        using namespace std::string_literals;
+        assert(e.data.has_value() && e.data.value().size() == 1);
+        auto echar = static_cast<uint32_t>(e.data.value().at(0));
+        return e.kind == ::supdef::token_kind::newline      ?
+            "<newline>: U+"s + std::format("{:04X}", echar) :
+            "<horizontal whitespace>: U+"s + std::format("{:04X}", echar);
+    };
+    static constexpr auto fmt_token(const ::supdef::token& e) noexcept -> std::string
+    {
+        if (e.kind == ::supdef::token_kind::newline || e.kind == ::supdef::token_kind::horizontal_whitespace)
+            return fmt_whitespace(e);
+        std::string prefix = "",
+                    suffix = "";
+        if (e.kind == ::supdef::token_kind::char_literal)
+            prefix = suffix = "'";
+        if (e.kind == ::supdef::token_kind::string_literal)
+            prefix = suffix = "\"";
+        if (e.kind == ::supdef::token_kind::hex_integer_literal)
+            prefix = "0x";
+        if (e.kind == ::supdef::token_kind::octal_integer_literal)
+            prefix = "0";
+        if (e.kind == ::supdef::token_kind::binary_integer_literal)
+            prefix = "0b";
+        return prefix + fmt_data(e.data) + suffix;
+    };
+    static constexpr void output_token_to(
+        std::ostream& os, const ::supdef::token& tok, ::supdef::parser::output_kind kind, size_t token_index = -1
+    )
+    {
+        switch (kind)
         {
-            auto pos = str.find(bs_string, found.empty() ? 0 : found.back() + bs_string.length());
-            if (pos == std::u32string::npos)
+        case ::supdef::parser::output_kind::text:
+            switch (tok.kind)
+            {
+            // literals
+            case ::supdef::token_kind::char_literal:
+                [[__fallthrough__]];
+            case ::supdef::token_kind::string_literal:
+                [[__fallthrough__]];
+            case ::supdef::token_kind::hex_integer_literal:
+                [[__fallthrough__]];
+            case ::supdef::token_kind::octal_integer_literal:
+                [[__fallthrough__]];
+            case ::supdef::token_kind::binary_integer_literal:
+                os << fmt_token(tok);
                 break;
-            found.push_back(pos);
+
+            // EOF
+            case ::supdef::token_kind::eof:
+                os << '\n';
+                break;
+
+            // everything else
+            default:
+                os << format(tok.data.value());
+                break;
+            }
+            break;
+        case ::supdef::parser::output_kind::tokens:
+            os << "<token n°" << token_index << ">\n"
+               << "  kind:    " << magic_enum::enum_name(tok.kind) << '\n'
+               << "  keyword: " << enum_name_as_string(tok) << '\n'
+               << "  data:    " << fmt_token(tok) << '\n';
+            break;
+        case ::supdef::parser::output_kind::ast:
+            // TODO: implement
+            break;
+        default: break;
         }
-        std::sort(found.begin(), found.end(), std::less<size_t>());
-        for (auto&& it = found.begin(); it != found.end(); ++it)
-        {
-            str.replace(*it, bs_string.length(), bs_replacement);
-            // decrement all the other positions
-            std::for_each(it + 1, found.end(), [](auto& x) { --x; });
-        }
+    }
+}
+
+void ::supdef::parser::output_to(std::ostream& os, output_kind kind)
+{
+    if (kind & output_kind::text)
+    {
+        for (size_t i = 0; i < m_tokens.size(); ++i)
+            output_token_to(os, m_tokens.at(i), output_kind::text, i);
+    }
+    if (kind & output_kind::tokens)
+    {
+        for (size_t i = 0; i < m_tokens.size(); ++i)
+            output_token_to(os, m_tokens.at(i), output_kind::tokens, i);
+    }
+    if (kind & output_kind::ast)
+    {
+        // TODO: implement
+    }
+    if (kind & output_kind::original)
+        os << format(m_file.original_data());
+}
+
+void ::supdef::parser::output_to(const stdfs::path& filename, output_kind kind)
+{
+    std::ofstream ofs(filename);
+    this->output_to(ofs, kind);
+}
+
+#if 0
+static void splice_lines(std::u32string& str)
+{
+    using namespace std::string_literals;
+    static const auto bs_string = U"\\\n"s;
+    static const auto bs_replacement = U" "s;
+    std::vector<size_t> found;
+    while (true)
+    {
+        auto pos = str.find(bs_string, found.empty() ? 0 : found.back() + bs_string.length());
+        if (pos == std::u32string::npos)
+            break;
+        found.push_back(pos);
+    }
+    std::sort(found.begin(), found.end(), std::less<size_t>());
+    for (auto&& it = found.begin(); it != found.end(); ++it)
+    {
+        str.replace(*it, bs_string.length(), bs_replacement);
+        // decrement all the other positions
+        std::for_each(it + 1, found.end(), [](auto& x) { --x; });
     }
 }
 
@@ -499,7 +687,7 @@ no_check_needed:
     // <supdef-line> ::= <let-expresion> | <if-expression> | <for-expression> | <while-expression> | <expression>
     // <let-expression> ::= @let <identifier> = <expression>
     // <if-expression> ::= @if <expression> begin <expression> end
-    
+
     static supdef_map_type find_supdefs(std::vector<::supdef::token>& tokens)
     {
         supdef_map_type supdefs;
@@ -663,3 +851,5 @@ void supdef::parser::output_to(const stdfs::path& filename, output_kind kind)
     std::ofstream file(filename);
     output_to(file, kind);
 }
+
+#endif

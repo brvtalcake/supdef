@@ -52,6 +52,10 @@ namespace supdef
         tilde,                 // ~
         period,                // .
 
+        backslash,             // <U+005C>
+        inline_comment,        // // ...
+        multiline_comment,     // /* ... */
+
         other, // any other token
         eof    // end of file
     };
@@ -71,8 +75,19 @@ namespace supdef
         unknown
     };
 
+    struct token_loc
+    {
+        std::shared_ptr<stdfs::path> filename;
+        size_t line;
+        size_t column;
+
+        off_t infile_offset;
+        size_t toksize;
+    };
+
     struct token
     {
+        token_loc loc;
         std::optional<std::u32string> data;
         std::optional<keyword_kind> keyword;
         token_kind kind;
@@ -81,13 +96,14 @@ namespace supdef
     class tokenizer
     {
     public:
-        tokenizer(const std::u32string &data);
+        tokenizer(const std::u32string &data, std::shared_ptr<stdfs::path> filename = nullptr);
         ~tokenizer();
 
-        std::generator<token> tokenize();
+        std::generator<token> tokenize(std::shared_ptr<stdfs::path> filename = nullptr);
 
     private:
         std::u32string m_data;
+        std::shared_ptr<stdfs::path> m_filename;
     };
 }
 

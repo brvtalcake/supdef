@@ -48,8 +48,8 @@ namespace
     }
 }
 
-supdef::tokenizer::tokenizer(const std::u32string& data)
-    : m_data(data)
+supdef::tokenizer::tokenizer(const std::u32string& data, std::shared_ptr<stdfs::path> filename)
+    : m_data(data), m_filename(filename)
 {
 }
 
@@ -481,8 +481,12 @@ namespace
 }
 
 
-std::generator<supdef::token> supdef::tokenizer::tokenize()
+std::generator<supdef::token> supdef::tokenizer::tokenize(std::shared_ptr<stdfs::path> filename)
 {
+    auto processed_filename = filename ? filename : m_filename;
+    if (!processed_filename)
+        throw std::invalid_argument("filename is required");
+
     state s{
         .start = m_data.begin(),
         .end = m_data.end(),

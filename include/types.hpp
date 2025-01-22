@@ -19,14 +19,14 @@ namespace stdext = ::__gnu_cxx;
 
 namespace supdef
 {
-    struct location
-    {
-        std::shared_ptr<const stdfs::path> filename;
-        size_t line;
-        size_t column;
-        size_t off;
-        size_t len;
-    };
+    //struct location
+    //{
+    //    std::shared_ptr<const stdfs::path> filename;
+    //    size_t line;
+    //    size_t column;
+    //    size_t off;
+    //    size_t len;
+    //};
 
     using bigint = boost::multiprecision::mpz_int;
     using bigfloat = boost::multiprecision::mpf_float;
