@@ -244,6 +244,27 @@ namespace supdef
         {
             return is_odigit(static_cast<UChar32>(c));
         }
+
+        static inline bool is_bindigit(UChar32 c)
+        {
+            auto numval = ::supdef::unicode::numeric_value<uint8_t>(c);
+            bool isa_digit = ::supdef::unicode::category::is_digit(c);
+            return isa_digit && numval < 2;
+        }
+        template <typename T = uint_least32_t>
+        static inline bool is_bindigit(__ENABLEIF_2(T) c)
+        {
+            return is_bindigit(static_cast<UChar32>(c));
+        }
+        template <typename T = uint32_t>
+        static inline bool is_bindigit(__ENABLEIF_1(T) c)
+        {
+            return is_bindigit(static_cast<UChar32>(c));
+        }
+        static inline bool is_bindigit(char32_t c)
+        {
+            return is_bindigit(static_cast<UChar32>(c));
+        }
     }
 
     namespace unicat = unicode::category;

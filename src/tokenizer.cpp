@@ -59,12 +59,44 @@ supdef::tokenizer::~tokenizer()
 
 struct state
 {
-    /* const */ std::u32string::const_iterator start;
-    /* const */ std::u32string::const_iterator end;
+    const std::shared_ptr<stdfs::path> filename;
+    const std::u32string::const_iterator start;
+    const std::u32string::const_iterator end;
     std::u32string::const_iterator next;
+    size_t line;
+    size_t col;
+#if 0
     supdef::token_kind kind;
     std::optional<supdef::keyword_kind> keyword;
     std::optional<std::u32string> data;
+#else
+    ::supdef::token tokret;
+#endif
+
+    auto advance() -> decltype(next)
+    {
+        if (next == end)
+            return;
+        decltype(next) prev = next;
+        if (*next == U'\n')
+        {
+            ++line;
+            col = 1;
+        }
+        else
+            ++col;
+        ++next;
+        return prev;
+    }
+
+    auto advance(size_t n) -> decltype(next)
+    {
+        assert(n != 0);
+        auto prev = next;
+        for (size_t i = 0; i < n; ++i)
+            advance();
+        return prev;
+    }
 };
 
 using maybe_state = std::optional<std::reference_wrapper<state>>;
@@ -78,15 +110,30 @@ namespace
 #undef  TOKEN_CASE
 #define TOKEN_CASE(c, k)                \
     case U ## c: {                      \
-        s.kind = supdef::token_kind::k; \
-        s.data = std::u32string(        \
-            1,                          \
-            U ## c                      \
-        );                              \
-        s.keyword = std::nullopt;       \
-        ++s.next;                       \
+        s.tokret = {                    \
+            .loc = {                    \
+                .filename = s.filename, \
+                .line = s.line,         \
+                .column = s.col,        \
+                .infile_offset =        \
+                    std::distance(      \
+                        s.start,        \
+                        s.next          \
+                    ),                  \
+                .toksize = 1            \
+            },                          \
+            .data = std::u32string(     \
+                1,                      \
+                U ## c                  \
+            ),                          \
+            .keyword = std::nullopt,    \
+            .kind =                     \
+                supdef::token_kind::k   \
+        };                              \
+        s.advance();                    \
         return std::ref(s);             \
     } break
+
             TOKEN_CASE('(', lparen);
             TOKEN_CASE(')', rparen);
             TOKEN_CASE('{', lbrace);
@@ -120,70 +167,95 @@ namespace
 
     static maybe_state match_horizws(state& s)
     {
-        bool (*funcptr)(char32_t) = &supdef::unicat::is_blank;
-        if (funcptr(*s.next))
+        if (supdef::unicat::is_blank(*s.next))
         {
-            s.kind = supdef::token_kind::horizontal_whitespace;
-            s.data = std::u32string(1, *s.next);
-            s.keyword = std::nullopt;
-            ++s.next;
+            s.tokret = {
+                .loc = {
+                    .filename = s.filename,
+                    .line = s.line,
+                    .column = s.col,
+                    .infile_offset = std::distance(s.start, s.next),
+                    .toksize = 1
+                },
+                .data = std::u32string(1, *s.next),
+                .keyword = std::nullopt,
+                .kind = supdef::token_kind::horizontal_whitespace
+            };
+            s.advance();
             return std::ref(s);
         }
         return std::nullopt;
     }
 
+    // TODO: for number literals, add support for scientific notation
     static maybe_state match_lit(state& s)
     {
+        auto col_start  = s.col,
+             line_start = s.line;
         if (*s.next == U'\'')
         {
             char32_t buffer[2];
-            s.next++;
+            size_t count;
+            s.advance();
             if (*s.next == U'\\')
             {
-                buffer[0] = *s.next++;
-                buffer[1] = *s.next++;
-                if (*s.next != U'\'')
-                    std::unreachable(); // already handled when removing comments
-
-                s.next++;
-                s.kind = supdef::token_kind::char_literal;
-                s.data = std::u32string(buffer, 2);
-                s.keyword = std::nullopt;
-                return std::ref(s);
+                count = 2;
+                buffer[0] = *s.advance();
+                buffer[1] = *s.advance();
             }
             else
             {
-                buffer[0] = *s.next++;
-                if (*s.next != U'\'')
-                    std::unreachable(); // already handled when removing comments
-
-                s.next++;
-                s.kind = supdef::token_kind::char_literal;
-                s.data = std::u32string(buffer, 1);
-                s.keyword = std::nullopt;
-                return std::ref(s);
+                count = 1;
+                buffer[0] = *s.advance();
             }
+            assert(*s.next == U'\'');
+
+            s.advance();
+            s.tokret = {
+                .loc = {
+                    .filename = s.filename,
+                    .line = line_start,
+                    .column = col_start,
+                    .infile_offset = std::distance(s.start, s.next) - count - 2,
+                    .toksize = count + 2
+                },
+                .data = std::u32string(buffer, count),
+                .keyword = std::nullopt,
+                .kind = supdef::token_kind::char_literal
+            };
+            return std::ref(s);
         }
 
         if (*s.next == U'"')
         {
-            std::u32string buffer;
-            s.next++;
+            size_t count = 0;
+            std::u32string buffer(32);
+            s.advance();
+            // TODO: handle unterminated string (and char) literals
             while (*s.next != U'"')
             {
                 if (*s.next == U'\\')
                 {
-                    buffer.push_back(*s.next++);
-                    buffer.push_back(*s.next++);
+                    buffer[count++] = *s.advance();
+                    buffer[count++] = *s.advance();
                 }
                 else
-                    buffer.push_back(*s.next++);
+                    buffer[count++] = *s.advance();
             }
 
-            s.next++;
-            s.kind = supdef::token_kind::string_literal;
-            s.data = buffer;
-            s.keyword = std::nullopt;
+            s.advance();
+            s.tokret = {
+                .loc = {
+                    .filename = s.filename,
+                    .line = line_start,
+                    .column = col_start,
+                    .infile_offset = std::distance(s.start, s.next) - count - 2,
+                    .toksize = count + 2
+                },
+                .data = std::u32string(buffer, count),
+                .keyword = std::nullopt,
+                .kind = supdef::token_kind::string_literal
+            };
             return std::ref(s);
         }
 
@@ -192,42 +264,79 @@ namespace
             auto cpy = s.next;
             if (s.next[1] == U'x')
             {
-                s.next += 2;
+                s.advance(2);
                 while (s.next != s.end && supdef::unicat::is_xdigit(*s.next))
-                    ++s.next;
+                    s.advance();
 
-                s.kind = supdef::token_kind::hex_integer_literal;
-                s.data = std::u32string(cpy + 2, s.next);
-                s.keyword = std::nullopt;
+                s.tokret = {
+                    .loc = {
+                        .filename = s.filename,
+                        .line = line_start,
+                        .column = col_start,
+                        .infile_offset = std::distance(s.start, cpy),
+                        .toksize = std::distance(cpy, s.next)
+                    },
+                    .data = std::u32string(cpy + 2, s.next),
+                    .keyword = std::nullopt,
+                    .kind = supdef::token_kind::hex_integer_literal
+                };
                 return std::ref(s);
             }
             else if (s.next[1] == U'b')
             {
-                s.next += 2;
-                while (s.next != s.end && (*s.next == U'0' || *s.next == U'1'))
-                    ++s.next;
+                s.advance(2);
+                while (s.next != s.end && supdef::unicat::is_bindigit(*s.next))
+                    s.advance();
 
-                s.kind = supdef::token_kind::binary_integer_literal;
-                s.data = std::u32string(cpy + 2, s.next);
-                s.keyword = std::nullopt;
+                s.tokret = {
+                    .loc = {
+                        .filename = s.filename,
+                        .line = line_start,
+                        .column = col_start,
+                        .infile_offset = std::distance(s.start, cpy),
+                        .toksize = std::distance(cpy, s.next)
+                    },
+                    .data = std::u32string(cpy + 2, s.next),
+                    .keyword = std::nullopt,
+                    .kind = supdef::token_kind::binary_integer_literal
+                };
                 return std::ref(s);
             }
             else
             {
+                s.advance();
                 while (s.next != s.end && supdef::unicat::is_odigit(*s.next))
-                    ++s.next;
+                    s.advance();
 
-                if (cpy != s.next - 1)
+                if (cpy < s.next - 2)
                 {
-                    s.kind = supdef::token_kind::octal_integer_literal;
-                    s.data = std::u32string(cpy, s.next);
-                    s.keyword = std::nullopt;
+                    s.tokret = {
+                        .loc = {
+                            .filename = s.filename,
+                            .line = line_start,
+                            .column = col_start,
+                            .infile_offset = std::distance(s.start, cpy),
+                            .toksize = std::distance(cpy, s.next)
+                        },
+                        .data = std::u32string(cpy, s.next),
+                        .keyword = std::nullopt,
+                        .kind = supdef::token_kind::octal_integer_literal
+                    };
                     return std::ref(s);
                 }
-                
-                s.kind = supdef::token_kind::integer_literal;
-                s.data = std::u32string(1, U'0');
-                s.keyword = std::nullopt;
+
+                s.tokret = {
+                    .loc = {
+                        .filename = s.filename,
+                        .line = line_start,
+                        .column = col_start,
+                        .infile_offset = std::distance(s.start, cpy),
+                        .toksize = 1
+                    },
+                    .data = std::u32string(1, U'0'),
+                    .keyword = std::nullopt,
+                    .kind = supdef::token_kind::integer_literal
+                };
                 return std::ref(s);
             }
         }
@@ -237,32 +346,50 @@ namespace
             auto cpy = s.next;
 
             while (s.next != s.end && supdef::unicat::is_digit(*s.next))
-                ++s.next;
+                s.advance();
 
             if (s.next != s.end && *s.next == U'.')
             {
-                ++s.next;
+                s.advance();
                 while (s.next != s.end && supdef::unicat::is_digit(*s.next))
-                    ++s.next;
+                    s.advance();
 
                 if (s.next != s.end && (*s.next == U'e' || *s.next == U'E'))
                 {
-                    ++s.next;
+                    s.advance();
                     if (s.next != s.end && (*s.next == U'+' || *s.next == U'-'))
-                        ++s.next;
+                        s.advance();
                     while (s.next != s.end && supdef::unicat::is_digit(*s.next))
-                        ++s.next;
+                        s.advance();
                 }
 
-                s.kind = supdef::token_kind::floating_literal;
-                s.data = std::u32string(cpy, s.next);
-                s.keyword = std::nullopt;
+                s.tokret = {
+                    .loc = {
+                        .filename = s.filename,
+                        .line = line_start,
+                        .column = col_start,
+                        .infile_offset = std::distance(s.start, cpy),
+                        .toksize = std::distance(cpy, s.next)
+                    },
+                    .data = std::u32string(cpy, s.next),
+                    .keyword = std::nullopt,
+                    .kind = supdef::token_kind::floating_literal
+                };
                 return std::ref(s);
             }
 
-            s.kind = supdef::token_kind::integer_literal;
-            s.data = std::u32string(cpy, s.next);
-            s.keyword = std::nullopt;
+            s.tokret = {
+                .loc = {
+                    .filename = s.filename,
+                    .line = line_start,
+                    .column = col_start,
+                    .infile_offset = std::distance(s.start, cpy),
+                    .toksize = std::distance(cpy, s.next)
+                },
+                .data = std::u32string(cpy, s.next),
+                .keyword = std::nullopt,
+                .kind = supdef::token_kind::integer_literal
+            };
             return std::ref(s);
         }
 
@@ -356,6 +483,9 @@ namespace
         };
         size_t index = 0;
 
+        auto line_start = s.line,
+             col_start  = s.col;
+
         auto beginning = s.next;
         while (s.next != s.end && index < max_keyword_length)
         {
@@ -390,9 +520,19 @@ namespace
                 }
 
                 s.next = beginning + max_size_matched;
-                s.kind = supdef::token_kind::keyword;
-                s.data = keywords[max_size_matched_index].kw;
-                s.keyword = keywords[max_size_matched_index].kw_kind;
+                s.col += max_size_matched;
+                s.tokret = {
+                    .loc = {
+                        .filename = s.filename,
+                        .line = line_start,
+                        .column = col_start,
+                        .infile_offset = std::distance(s.start, beginning),
+                        .toksize = max_size_matched
+                    },
+                    .data = keywords[max_size_matched_index].kw,
+                    .keyword = keywords[max_size_matched_index].kw_kind,
+                    .kind = supdef::token_kind::keyword
+                };
                 return std::ref(s);
             }
         }
@@ -412,17 +552,123 @@ namespace
         };
 
         const auto start = s.next;
+        const auto line_start = s.line,
+                   col_start  = s.col;
         if (is_id_start(*s.next))
         {
             while (s.next != s.end && is_id_continue(*s.next))
-                ++s.next;
+                s.advance();
 
-            s.kind = supdef::token_kind::identifier;
-            s.data = std::u32string(start, s.next);
-            s.keyword = std::nullopt;
+            s.tokret = {
+                .loc = {
+                    .filename = s.filename,
+                    .line = line_start,
+                    .column = col_start,
+                    .infile_offset = std::distance(s.start, start),
+                    .toksize = std::distance(start, s.next)
+                },
+                .data = std::u32string(start, s.next),
+                .keyword = std::nullopt,
+                .kind = supdef::token_kind::identifier
+            };
             return std::ref(s);
         }
 
+        return std::nullopt;
+    }
+
+    static maybe_state match_backslash(state& s)
+    {
+        if (*s.next == U'\\')
+        {
+            s.tokret = {
+                .loc = {
+                    .filename = s.filename,
+                    .line = s.line,
+                    .column = s.col,
+                    .infile_offset = std::distance(s.start, s.next),
+                    .toksize = 1
+                },
+                .data = std::u32string(1, U'\\'),
+                .keyword = std::nullopt,
+                .kind = supdef::token_kind::backslash
+            };
+            s.advance();
+            return std::ref(s);
+        }
+        return std::nullopt;
+    }
+
+    static maybe_state match_newline(state& s)
+    {
+        if (*s.next == U'\n')
+        {
+            s.tokret = {
+                .loc = {
+                    .filename = s.filename,
+                    .line = s.line,
+                    .column = s.col,
+                    .infile_offset = std::distance(s.start, s.next),
+                    .toksize = 1
+                },
+                .data = std::u32string(1, U'\n'),
+                .keyword = std::nullopt,
+                .kind = supdef::token_kind::newline
+            };
+            s.advance();
+            return std::ref(s);
+        }
+    }
+
+    static maybe_state match_comment(state& s)
+    {
+        const auto line_start = s.line,
+                   col_start  = s.col;
+        const auto start = s.next;
+        if (*s.next == U'/')
+        {
+            if (s.next + 1 != s.end && s.next[1] == U'/')
+            {
+                s.advance(2);
+                while (s.next != s.end && *s.next != U'\\' && *s.next != U'\n')
+                    s.advance();
+
+                s.tokret = {
+                    .loc = {
+                        .filename = s.filename,
+                        .line = line_start,
+                        .column = col_start,
+                        .infile_offset = std::distance(s.start, start),
+                        .toksize = std::distance(start, s.next)
+                    },
+                    .data = std::u32string(start, s.next),
+                    .keyword = std::nullopt,
+                    .kind = supdef::token_kind::inline_comment
+                };
+                return std::ref(s);
+            }
+            else if (s.next + 1 != s.end && s.next[1] == U'*')
+            {
+                s.advance(2);
+                while (s.next + 1 != s.end && !(s.next[0] == U'*' && s.next[1] == U'/'))
+                    s.advance();
+                
+                s.advance(2);
+                s.tokret = {
+                    .loc = {
+                        .filename = s.filename,
+                        .line = line_start,
+                        .column = col_start,
+                        .infile_offset = std::distance(s.start, start),
+                        .toksize = std::distance(start, s.next)
+                    },
+                    .data = std::u32string(start, s.next),
+                    .keyword = std::nullopt,
+                    .kind = supdef::token_kind::multiline_comment
+                };
+                return std::ref(s);
+            }
+        }
         return std::nullopt;
     }
 
@@ -432,11 +678,28 @@ namespace
 
         if (s.next == s.end)
         {
-            s.kind = supdef::token_kind::eof;
-            s.data = std::nullopt;
-            s.keyword = std::nullopt;
+            s.tokret = {
+                .loc = {
+                    .filename = s.filename,
+                    .line = s.line,
+                    .column = s.col,
+                    // let's make it 1-sized although it's not
+                    .infile_offset = std::distance(s.start, s.end) - 1,
+                    // let's make it 1-sized although it's not
+                    .toksize = 1
+                },
+                .data = std::nullopt,
+                .keyword = std::nullopt,
+                .kind = supdef::token_kind::eof
+            };
             return s;
         }
+
+        // must be before match_punct_token
+        maybe_state is_comment = match_comment(s);
+        if (is_comment.has_value())
+            return is_comment.value();
+        s.next = next_cpy;
 
         maybe_state is_known_punct = match_punct_token(s);
         if (is_known_punct.has_value())
@@ -447,19 +710,20 @@ namespace
         if (is_horizws.has_value())
             return is_horizws.value();
         s.next = next_cpy;
-        
-        if (*s.next == U'\n')
-        {
-            s.kind = supdef::token_kind::newline;
-            s.data = std::u32string(1, U'\n');
-            s.keyword = std::nullopt;
-            ++s.next;
-            return s;
-        }
 
+        maybe_state is_newline = match_newline(s);
+        if (is_newline.has_value())
+            return is_newline.value();
+        s.next = next_cpy;
+        
         maybe_state is_lit = match_lit(s);
         if (is_lit.has_value())
             return is_lit.value();
+        s.next = next_cpy;
+
+        maybe_state is_backslash = match_backslash(s);
+        if (is_backslash.has_value())
+            return is_backslash.value();
         s.next = next_cpy;
     
         maybe_state is_keyword = match_keyword(s);
@@ -472,10 +736,19 @@ namespace
             return is_ident.value();
         s.next = next_cpy;
 
-        s.kind = supdef::token_kind::other;
-        s.data = std::u32string(1, *s.next);
-        s.keyword = std::nullopt;
-        ++s.next;
+        s.tokret = {
+            .loc = {
+                .filename = s.filename,
+                .line = s.line,
+                .column = s.col,
+                .infile_offset = std::distance(s.start, s.next),
+                .toksize = 1
+            },
+            .data = std::u32string(1, *s.next),
+            .keyword = std::nullopt,
+            .kind = supdef::token_kind::other
+        };
+        s.advance();
         return s;
     }
 }
