@@ -10,6 +10,7 @@
 
 #include <filesystem>
 #include <vector>
+#include <list>
 #include <set>
 #include <utility>
 #include <generator>

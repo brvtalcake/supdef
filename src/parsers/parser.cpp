@@ -75,13 +75,13 @@ void ::supdef::parser::do_stage2()
 {
     auto& orig_data = m_file.original_data();
     // splice lines
-    auto&& token = m_tokens.cbegin();
-    while (token != m_tokens.cend())
+    auto token = m_tokens.begin();
+    while (token != m_tokens.end())
     {
         if (token->kind == token_kind::backslash)
         {
-            auto&& next_token = std::next(token);
-            if (next_token == m_tokens.cend())
+            auto next_token = std::next(token);
+            if (next_token == m_tokens.end())
             {
                 printer::error(
                     "unexpected end of file while parsing backslash character",
@@ -89,49 +89,47 @@ void ::supdef::parser::do_stage2()
                 );
                 return;
             }
-            if (next_token.kind == token_kind::newline)
+            if (next_token->kind == token_kind::newline)
             {
-                auto replacement = token;
-                replacement.kind = token_kind::horizontal_whitespace;
-                replacement.data = U" ";
-                m_tokens.at(i) = replacement;
-                m_tokens.erase(m_tokens.begin() + i + 1);
+                m_tokens.erase(next_token);
+                token->kind = token_kind::horizontal_whitespace;
+                token->data = U" ";
+                token->loc.toksize = 1;
             }
             else
             {
                 printer::warning(
                     "backslash character outside of string or character literal",
-                    token, orig_data, &format
+                    *token, orig_data, &format
                 );
             }
         }
+        std::advance(token, 1);
     }
 }
 
 void ::supdef::parser::do_stage3()
 {
     auto& orig_data = m_file.original_data();
-    for (size_t i = 0; i < m_tokens.size(); ++i)
+    // remove comments
+    for (auto token = m_tokens.begin(); token != m_tokens.end(); std::advance(token, 1))
     {
-        auto&& token = m_tokens.at(i);
-        switch (token.kind)
+        switch (token->kind)
         {
         case token_kind::inline_comment: {
-            size_t j = i + 1;
-            while (j < m_tokens.size() && m_tokens.at(j).kind != token_kind::newline)
-                ++j;
-            m_tokens.erase(m_tokens.begin() + i, m_tokens.begin() + j);
+            auto nltok = std::find_if(
+                token, m_tokens.end(),
+                [](const ::supdef::token& tok) {
+                    return tok.kind == token_kind::newline;
+                }
+            );
+            m_tokens.erase(token, nltok);
+            token = std::prev(nltok);
         } break;
         case token_kind::multiline_comment: {
-            ::supdef::token replacement {
-                .loc = token.loc,
-                .data = U" ",
-                .keyword = std::nullopt,
-                .kind = token_kind::horizontal_whitespace
-            };
-            replacement.loc.toksize = 1;
-            m_tokens.erase(m_tokens.begin() + i);
-            m_tokens.insert(m_tokens.begin() + i, replacement);
+            token->data = U" ";
+            token->kind = token_kind::horizontal_whitespace;
+            token->loc.toksize = 1;
         } break;
         default:
             break;
@@ -233,13 +231,13 @@ void ::supdef::parser::output_to(std::ostream& os, output_kind kind)
 {
     if (kind & output_kind::text)
     {
-        for (size_t i = 0; i < m_tokens.size(); ++i)
-            output_token_to(os, m_tokens.at(i), output_kind::text, i);
+        for (auto&& [i, token] : std::views::enumerate(m_tokens))
+            output_token_to(os, token, output_kind::text, i);
     }
     if (kind & output_kind::tokens)
     {
-        for (size_t i = 0; i < m_tokens.size(); ++i)
-            output_token_to(os, m_tokens.at(i), output_kind::tokens, i);
+        for (auto&& [i, token] : std::views::enumerate(m_tokens))
+            output_token_to(os, token, output_kind::tokens, i);
     }
     if (kind & output_kind::ast)
     {
