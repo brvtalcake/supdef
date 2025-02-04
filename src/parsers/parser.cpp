@@ -23,7 +23,7 @@ static constexpr uint64_t seed_with_time()
     auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(now);
     auto epoch = now_ms.time_since_epoch();
     auto value = std::chrono::duration_cast<std::chrono::milliseconds>(epoch);
-    return reinterpret_cast<uint64_t>(value.count());
+    return std::bit_cast<uint64_t>(value.count());
 }
 
 supdef::parser::parser(const stdfs::path& filename)
@@ -64,8 +64,9 @@ namespace
 void ::supdef::parser::do_stage1()
 {
     auto& data = m_file.data();
+    auto filename = m_file.filename();
     
-    tokenizer tk(data);
+    tokenizer tk(data, filename);
     for (auto&& token : tk.tokenize())
         m_tokens.push_back(token);
 }
@@ -74,20 +75,20 @@ void ::supdef::parser::do_stage2()
 {
     auto& orig_data = m_file.original_data();
     // splice lines
-    for (size_t i = 0; i < m_tokens.size(); ++i)
+    auto&& token = m_tokens.cbegin();
+    while (token != m_tokens.cend())
     {
-        auto&& token = m_tokens.at(i);
-        if (token.kind == token_kind::backslash)
+        if (token->kind == token_kind::backslash)
         {
-            if (i + 1 == m_tokens.size())
+            auto&& next_token = std::next(token);
+            if (next_token == m_tokens.cend())
             {
                 printer::error(
                     "unexpected end of file while parsing backslash character",
-                    token, orig_data, &format
+                    *token, orig_data, &format
                 );
                 return;
             }
-            auto&& next_token = m_tokens.at(i + 1);
             if (next_token.kind == token_kind::newline)
             {
                 auto replacement = token;
@@ -122,7 +123,15 @@ void ::supdef::parser::do_stage3()
             m_tokens.erase(m_tokens.begin() + i, m_tokens.begin() + j);
         } break;
         case token_kind::multiline_comment: {
+            ::supdef::token replacement {
+                .loc = token.loc,
+                .data = U" ",
+                .keyword = std::nullopt,
+                .kind = token_kind::horizontal_whitespace
+            };
+            replacement.loc.toksize = 1;
             m_tokens.erase(m_tokens.begin() + i);
+            m_tokens.insert(m_tokens.begin() + i, replacement);
         } break;
         default:
             break;
@@ -198,7 +207,6 @@ namespace
 
             // EOF
             case ::supdef::token_kind::eof:
-                os << '\n';
                 break;
 
             // everything else

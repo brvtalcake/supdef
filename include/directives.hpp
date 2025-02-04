@@ -14,6 +14,7 @@
 #include <utility>
 
 #include <boost/multiprecision/gmp.hpp>
+#include <boost/multiprecision/mpfr.hpp>
 
 #if __cpp_explicit_this_parameter < 202110L
     #error "explicit this parameter is required but not available"
@@ -23,13 +24,14 @@ namespace supdef
 {
     // TODO: class for supdef and runnable directives
 
+    using big_int = boost::multiprecision::mpz_int;
+    using big_float = boost::multiprecision::mpf_float;
+
     // { currently invoked supdef name, variable name }
     using supdef_varname = std::pair<std::u32string, std::u32string>;
 
     using supdef_variable = std::variant<
-        boost::multiprecision::gmp_int,
-        boost::multiprecision::gmp_float,
-        std::u32string,
+        big_int, big_float, std::u32string,
         std::vector<std::u32string>
     >;
 

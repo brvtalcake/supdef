@@ -9,7 +9,12 @@
 #include <optional>
 #include <bit>
 
-#include <xxh3.h>
+#if 0
+#define XXH_INLINE_ALL 1
+#else
+#define XXH_NAMESPACE supdef_xxhash_impl_
+#endif
+#include <xxhash.h>
 
 namespace supdef
 {
@@ -19,18 +24,21 @@ namespace supdef
 
         static inline __uint128_t hash128_bytes(const void* data, size_t size, std::optional<__uint128_t> seed = std::nullopt)
         {
-            if (seed == 0)
-                return XXH3_128bits(data, size);
+            XXH128_hash_t tmp;
+            if (!bool(seed))
+                tmp = XXH3_128bits(data, size);
             else
-                return XXH3_128bits_withSeed(data, size, seed);
+                tmp = XXH3_128bits_withSeed(data, size, seed.value());
+            /* XXH128_canonicalFromHash(tmp); */
+            return std::bit_cast<__uint128_t>(tmp);
         }
 
         static inline uint64_t hash64_bytes(const void* data, size_t size, std::optional<uint64_t> seed = std::nullopt)
         {
-            if (seed == 0)
+            if (!bool(seed))
                 return XXH3_64bits(data, size);
             else
-                return XXH3_64bits_withSeed(data, size, seed);
+                return XXH3_64bits_withSeed(data, size, seed.value());
         }
 
         static inline uint32_t hash32_bytes(const void* data, size_t size, std::optional<uint32_t> seed = std::nullopt)

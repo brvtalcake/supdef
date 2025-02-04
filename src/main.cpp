@@ -201,21 +201,12 @@ static decltype(auto) parse_cmdline(int argc, char const* const* argv)
 
 struct cmdline
 {
-    enum output
-    {
-        text   = 1 << 0,
-        tokens = 1 << 1,
-        ast    = 1 << 2,
-        all    = text
-               | tokens
-               | ast
-    };
     stdfs::path input_file;
     stdfs::path output_file;
     std::string progname;
     unsigned stop_after_stage;
 #if 1
-    output output_kind;
+    ::supdef::parser::output_kind output_kind;
 #else
     std::underlying_type_t<output> output_kind;
 #endif
@@ -227,7 +218,7 @@ static ::cmdline supdef_cmdline{
     .output_file = "",
     .progname = "",
     .stop_after_stage = 3U,
-    .output_kind = ::cmdline::text,
+    .output_kind = ::supdef::parser::output_kind::text,
     .verbosity = 0
 };
 
@@ -274,6 +265,11 @@ static void parse_cmdline(int argc, char const* const* argv)
         ;
     progargs.add_argument("-t", "--ast")
         .help("output ast")
+        .flag()
+        .nargs(0)
+        ;
+    progargs.add_argument("-O", "--original")
+        .help("output original content")
         .flag()
         .nargs(0)
         ;
@@ -325,16 +321,20 @@ static void parse_cmdline(int argc, char const* const* argv)
         supdef_cmdline.stop_after_stage = SUPDEF_MAX_PARSING_PHASE;
 
     if (progargs.is_used("-k"))
-        supdef_cmdline.output_kind = cmdline::output(
-            supdef_cmdline.output_kind | ::cmdline::tokens
+        supdef_cmdline.output_kind = ::supdef::parser::output_kind(
+            supdef_cmdline.output_kind | ::supdef::parser::output_kind::tokens
         );
     if (progargs.is_used("-t"))
-        supdef_cmdline.output_kind = cmdline::output(
-            supdef_cmdline.output_kind | ::cmdline::ast
+        supdef_cmdline.output_kind = ::supdef::parser::output_kind(
+            supdef_cmdline.output_kind | ::supdef::parser::output_kind::ast
+        );
+    if (progargs.is_used("-O"))
+        supdef_cmdline.output_kind = ::supdef::parser::output_kind(
+            supdef_cmdline.output_kind | ::supdef::parser::output_kind::original
         );
     if (progargs.is_used("-a"))
-        supdef_cmdline.output_kind = cmdline::output(
-            supdef_cmdline.output_kind | ::cmdline::all
+        supdef_cmdline.output_kind = ::supdef::parser::output_kind(
+            supdef_cmdline.output_kind | ::supdef::parser::output_kind::all
         );
 }
 #endif
@@ -418,29 +418,19 @@ static int real_main(int argc, char const* argv[])
     }
 
     supdef::parser parser(sourcefilepath);
-    auto outflags = supdef::parser::output_kind::text;
-    outflags = supdef::parser::output_kind(
-        outflags | (supdef_cmdline.output_kind & cmdline::tokens ? supdef::parser::output_kind::tokens : 0)
-    );
-    outflags = supdef::parser::output_kind(
-        outflags | (supdef_cmdline.output_kind & cmdline::ast ? supdef::parser::output_kind::ast : 0)
-    );
-    outflags = supdef::parser::output_kind(
-        outflags | (supdef_cmdline.output_kind & cmdline::all ? supdef::parser::output_kind::all : 0)
-    );
     parser.do_stage1();
     if (supdef_cmdline.stop_after_stage == 1U)
     {
-        parser.output_to(supdef_cmdline.output_file, outflags);
+        parser.output_to(supdef_cmdline.output_file, supdef_cmdline.output_kind);
         return 0;
     }
     parser.do_stage2();
     if (supdef_cmdline.stop_after_stage == 2U)
     {
-        parser.output_to(supdef_cmdline.output_file, outflags);
+        parser.output_to(supdef_cmdline.output_file, supdef_cmdline.output_kind);
         return 0;
     }
     parser.do_stage3();
-    parser.output_to(supdef_cmdline.output_file, outflags);
+    parser.output_to(supdef_cmdline.output_file, supdef_cmdline.output_kind);
     return 0;
 }

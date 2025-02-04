@@ -48,7 +48,7 @@ namespace
     }
 }
 
-supdef::tokenizer::tokenizer(const std::u32string& data, std::shared_ptr<stdfs::path> filename)
+supdef::tokenizer::tokenizer(const std::u32string& data, std::shared_ptr<const stdfs::path> filename)
     : m_data(data), m_filename(filename)
 {
 }
@@ -59,9 +59,9 @@ supdef::tokenizer::~tokenizer()
 
 struct state
 {
-    const std::shared_ptr<stdfs::path> filename;
-    const std::u32string::const_iterator start;
-    const std::u32string::const_iterator end;
+    /* const */ std::shared_ptr<const stdfs::path> filename;
+    /* const */ std::u32string::const_iterator start;
+    /* const */ std::u32string::const_iterator end;
     std::u32string::const_iterator next;
     size_t line;
     size_t col;
@@ -76,7 +76,7 @@ struct state
     auto advance() -> decltype(next)
     {
         if (next == end)
-            return;
+            return next;
         decltype(next) prev = next;
         if (*next == U'\n')
         {
@@ -229,18 +229,22 @@ namespace
         if (*s.next == U'"')
         {
             size_t count = 0;
-            std::u32string buffer(32);
+            std::u32string buffer;
             s.advance();
             // TODO: handle unterminated string (and char) literals
             while (*s.next != U'"')
             {
                 if (*s.next == U'\\')
                 {
-                    buffer[count++] = *s.advance();
-                    buffer[count++] = *s.advance();
+                    buffer.push_back(*s.advance());
+                    buffer.push_back(*s.advance());
+                    count += 2;
                 }
                 else
-                    buffer[count++] = *s.advance();
+                {
+                    buffer.push_back(*s.advance());
+                    ++count;
+                }
             }
 
             s.advance();
@@ -252,7 +256,7 @@ namespace
                     .infile_offset = std::distance(s.start, s.next) - count - 2,
                     .toksize = count + 2
                 },
-                .data = std::u32string(buffer, count),
+                .data = buffer,
                 .keyword = std::nullopt,
                 .kind = supdef::token_kind::string_literal
             };
@@ -308,7 +312,7 @@ namespace
                 while (s.next != s.end && supdef::unicat::is_odigit(*s.next))
                     s.advance();
 
-                if (cpy < s.next - 2)
+                if (std::distance(cpy, s.next) > 1)
                 {
                     s.tokret = {
                         .loc = {
@@ -318,7 +322,7 @@ namespace
                             .infile_offset = std::distance(s.start, cpy),
                             .toksize = std::distance(cpy, s.next)
                         },
-                        .data = std::u32string(cpy, s.next),
+                        .data = std::u32string(cpy + 1, s.next),
                         .keyword = std::nullopt,
                         .kind = supdef::token_kind::octal_integer_literal
                     };
@@ -618,6 +622,7 @@ namespace
             s.advance();
             return std::ref(s);
         }
+        return std::nullopt;
     }
 
     static maybe_state match_comment(state& s)
@@ -754,29 +759,38 @@ namespace
 }
 
 
-std::generator<supdef::token> supdef::tokenizer::tokenize(std::shared_ptr<stdfs::path> filename)
+std::generator<supdef::token> supdef::tokenizer::tokenize(std::shared_ptr<const stdfs::path> filename)
 {
     auto processed_filename = filename ? filename : m_filename;
     if (!processed_filename)
         throw std::invalid_argument("filename is required");
 
-    state s{
+    state s {
+        .filename = processed_filename,
         .start = m_data.begin(),
         .end = m_data.end(),
         .next = m_data.begin(),
-        .kind = supdef::token_kind::other,
-        .keyword = std::nullopt,
-        .data = std::nullopt
+        .line = 1,
+        .col = 1,
+        .tokret = {
+            .loc = {
+                .filename = processed_filename,
+                .line = 1,
+                .column = 1,
+                .infile_offset = 0,
+                .toksize = 0
+            },
+            .data = std::nullopt,
+            .keyword = std::nullopt,
+            .kind = supdef::token_kind::other
+        }
     };
 
     while (true)
     {
-        s.kind = token_kind::other;
-        s.keyword = std::nullopt;
-        s.data = std::nullopt;
         s = extract_next_token(s);
-        co_yield token{ s.data, s.keyword, s.kind };
-        if (s.kind == token_kind::eof)
+        co_yield s.tokret;
+        if (s.tokret.kind == supdef::token_kind::eof)
             break;
     }
 

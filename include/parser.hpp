@@ -73,10 +73,12 @@ namespace supdef
             auto colstr  = std::to_string(tok.loc.column);
             size_t linestart = orig.rfind(U'\n', tok.loc.infile_offset);
             size_t lineend = orig.find(U'\n', tok.loc.infile_offset);
-            linestart = linestart == std::u32string::npos
-                ? 0 : linestart + 1;
-            lineend = lineend == std::u32string::npos
-                ? orig.size() : lineend;
+            linestart = linestart != std::u32string::npos ?
+                        linestart                         :
+                        0;
+            lineend   = lineend   != std::u32string::npos ?
+                        lineend                           :
+                        orig.size();
             using namespace std::string_literals;
             std::clog << __INFO << "info:"s + __RESET + " at " <<
                 tok.loc.filename->string() << ':' << linestr << ':' << colstr << '\n' <<
@@ -91,10 +93,12 @@ namespace supdef
             auto colstr  = std::to_string(tok.loc.column);
             size_t linestart = orig.rfind(U'\n', tok.loc.infile_offset) + 1;
             size_t lineend = orig.find(U'\n', tok.loc.infile_offset);
-            linestart = linestart == std::u32string::npos
-                ? 0 : linestart + 1;
-            lineend = lineend == std::u32string::npos
-                ? orig.size() : lineend;
+            linestart = linestart != std::u32string::npos ?
+                        linestart                         :
+                        0;
+            lineend   = lineend   != std::u32string::npos ?
+                        lineend                           :
+                        orig.size();
             using namespace std::string_literals;
             std::clog << __WARN << "warning:"s + __RESET + " at " <<
                 tok.loc.filename->string() << ':' << linestr << ':' << colstr << '\n' <<
@@ -109,10 +113,12 @@ namespace supdef
             auto colstr  = std::to_string(tok.loc.column);
             size_t linestart = orig.rfind(U'\n', tok.loc.infile_offset) + 1;
             size_t lineend = orig.find(U'\n', tok.loc.infile_offset);
-            linestart = linestart == std::u32string::npos
-                ? 0 : linestart + 1;
-            lineend = lineend == std::u32string::npos
-                ? orig.size() : lineend;
+            linestart = linestart != std::u32string::npos ?
+                        linestart                         :
+                        0;
+            lineend   = lineend   != std::u32string::npos ?
+                        lineend                           :
+                        orig.size();
             using namespace std::string_literals;
             std::cerr << __ERR << "error:"s + __RESET + " at " <<
                 tok.loc.filename->string() << ':' << linestr << ':' << colstr << '\n' <<
@@ -127,10 +133,12 @@ namespace supdef
             auto colstr  = std::to_string(tok.loc.column);
             size_t linestart = orig.rfind(U'\n', tok.loc.infile_offset) + 1;
             size_t lineend = orig.find(U'\n', tok.loc.infile_offset);
-            linestart = linestart == std::u32string::npos
-                ? 0 : linestart + 1;
-            lineend = lineend == std::u32string::npos
-                ? orig.size() : lineend;
+            linestart = linestart != std::u32string::npos ?
+                        linestart                         :
+                        0;
+            lineend   = lineend   != std::u32string::npos ?
+                        lineend                           :
+                        orig.size();
             using namespace std::string_literals;
             std::cerr << __FATAL << "fatal error:"s + __RESET + " at " <<
                 tok.loc.filename->string() << ':' << linestr << ':' << colstr << '\n' <<
@@ -198,12 +206,12 @@ namespace supdef
         void do_stage2();
         void do_stage3();
 
-        enum output_kind
+        enum output_kind : uint_fast8_t
         {
-            text = 1,
-            tokens = 2,
-            ast = 4,
-            original = 8,
+            text =     1U << 0,
+            tokens =   1U << 1,
+            ast =      1U << 2,
+            original = 1U << 3,
             all = text
                 | tokens
                 | ast
@@ -227,7 +235,7 @@ namespace supdef
                 ::supdef::detail::xxhash<std::u32string, 64>
             >;
         source_file m_file;
-        std::vector<token> m_tokens;
+        std::list<token> m_tokens;
         std::set<parser, parser_compare> m_imported_parsers;
         supdef_map_type m_supdefs;
     };

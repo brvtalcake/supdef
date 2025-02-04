@@ -247,9 +247,11 @@ namespace supdef
 
         static inline bool is_bindigit(UChar32 c)
         {
-            auto numval = ::supdef::unicode::numeric_value<uint8_t>(c);
             bool isa_digit = ::supdef::unicode::category::is_digit(c);
-            return isa_digit && numval < 2;
+            if (!isa_digit)
+                return false;
+            auto numval = ::supdef::unicode::numeric_value<uint8_t>(c);
+            return numval < 2;
         }
         template <typename T = uint_least32_t>
         static inline bool is_bindigit(__ENABLEIF_2(T) c)
