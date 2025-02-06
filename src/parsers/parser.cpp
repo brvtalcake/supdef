@@ -16,18 +16,13 @@ GLOBAL_GETTER_DECL(
     std::vector<std::shared_ptr<const stdfs::path>>,
     already_processed_files
 );
-
-static constexpr uint64_t seed_with_time()
-{
-    auto now = std::chrono::system_clock::now();
-    auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(now);
-    auto epoch = now_ms.time_since_epoch();
-    auto value = std::chrono::duration_cast<std::chrono::milliseconds>(epoch);
-    return std::bit_cast<uint64_t>(value.count());
-}
+GLOBAL_GETTER_DECL(
+    BOOST_IDENTITY_TYPE((::supdef::detail::xxhash<std::u32string, 64>)),
+    u32string_xxhasher
+);
 
 supdef::parser::parser(const stdfs::path& filename)
-    : m_file(filename), m_tokens(), m_imported_parsers(), m_supdefs(32, ::supdef::detail::xxhash<std::u32string, 64>(seed_with_time()))
+    : m_file(stdfs::canonical(filename)), m_tokens(), m_imported_parsers(), m_supdefs(32, ::supdef::globals::get_u32string_xxhasher())
 {
     ::supdef::globals::get_already_processed_files().push_back(m_file.filename());
 }
@@ -61,6 +56,7 @@ namespace
 
 }
 
+// tokenize the file
 void ::supdef::parser::do_stage1()
 {
     auto& data = m_file.data();
@@ -71,10 +67,10 @@ void ::supdef::parser::do_stage1()
         m_tokens.push_back(token);
 }
 
+// splice lines
 void ::supdef::parser::do_stage2()
 {
     auto& orig_data = m_file.original_data();
-    // splice lines
     auto token = m_tokens.begin();
     while (token != m_tokens.end())
     {
@@ -108,10 +104,9 @@ void ::supdef::parser::do_stage2()
     }
 }
 
+// remove comments
 void ::supdef::parser::do_stage3()
 {
-    auto& orig_data = m_file.original_data();
-    // remove comments
     for (auto token = m_tokens.begin(); token != m_tokens.end(); std::advance(token, 1))
     {
         switch (token->kind)
@@ -133,6 +128,45 @@ void ::supdef::parser::do_stage3()
         } break;
         default:
             break;
+        }
+    }
+}
+
+// process imports
+void ::supdef::parser::do_stage4()
+{
+    for (auto token = m_tokens.cbegin(); token != m_tokens.cend(); std::advance(token, 1))
+    {
+        if (token->kind != token_kind::keyword)
+            continue;
+        if (token->keyword != keyword::import_)
+            continue;
+        auto next_token = std::next(token);
+        while (next_token != m_tokens.cend() && next_token->kind == token_kind::horizontal_whitespace)
+            std::advance(next_token, 1);
+        if (next_token == m_tokens.cend())
+        {
+            printer::error(
+                "unexpected end of file while parsing import statement",
+                *token, m_file.original_data(), &format
+            );
+            return;
+        }
+        stdfs::path extracted_path;
+        switch (next_token->kind)
+        {
+        case token_kind::string_literal:
+            extracted_path = stdfs::path(next_token->data.value());
+            break;
+        case token_kind::langle: {
+
+        } break;
+        default:
+            printer::error(
+                "unexpected token while parsing import statement",
+                *next_token, m_file.original_data(), &format
+            );
+            return;
         }
     }
 }

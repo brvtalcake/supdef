@@ -6,7 +6,6 @@
 
 #include <simdutf.h>
 
-namespace stdx = std::experimental;
 /* std::vector<uint_least32_t> supdef::read_whole_file(const std::filesystem::path& filename)
 {
     std::vector<uint_least32_t> ret;
@@ -62,6 +61,7 @@ supdef::source_file::source_file(const std::filesystem::path& filename)
 
     /* m_orig = simdutf::convert_utf8_to_utf32(fbuf, len); */
     // TODO: add support for more encoding types
+    // TODO: could probably also use std::wbuffer_convert
     //char32_t* buf = new char32_t[len];
     std::unique_ptr<char32_t[]> buf(new char32_t[len]);
     size_t len32 = simdutf::convert_utf8_to_utf32(fbuf, len, buf.get());

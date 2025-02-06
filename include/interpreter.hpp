@@ -30,10 +30,16 @@ namespace supdef
     // { currently invoked supdef name, variable name }
     using sdvarname = std::pair<std::u32string, std::u32string>;
 
-    using sdvariable = std::variant<
+    using sdatom = std::variant<
         bigint,                      // integer
         bigfloat,                    // float
         std::u32string               // string
+    >;
+    class sdcomposite;
+
+    using sdvariable = std::variant<
+        sdatom,
+        sdcomposite
     >;
 
     class sdcomposite
@@ -41,19 +47,26 @@ namespace supdef
     public:
         enum class kind
         {
-            list,
-            sequence,
-            map
+            tuple,   // (tokens, tokens, ...)
+            list,    // [tokens, tokens, ...]
+            set,     // {tokens, tokens, ...}
+            map      // {tokens: tokens, tokens: tokens, ...}
         };
     private:
-        std::unordered_set<sdvariable> m_variables;
+        using var_type = std::variant<
+            std::vector<sdvariable>,
+            std::list<sdvariable>,
+            std::map<sdvariable, sdvariable>,
+            uset<sdvariable>
+        >;
+        var_type m_variables;
         kind m_kind;
     };
 
     class supdef_interpreter_state
     {
     private:
-        std::map<sdvarname, sdvariable> m_variables;
+        std::map<sdvarname, sdatom> m_variables;
     };
 }
 

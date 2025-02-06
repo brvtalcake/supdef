@@ -195,6 +195,17 @@ namespace supdef
             enum options
             { none };
 
+            static constexpr options parse_options(const std::u32string& str)
+            {
+                // for now, no options are supported
+                return options::none;
+            }
+
+            constexpr auto operator<=>(const registered_supdef& rhs) const
+            {
+                return std::tie(name, opts) <=> std::tie(rhs.name, rhs.opts);
+            }
+
             std::vector<std::vector<::supdef::token>> lines;
             std::u32string name;
             options opts;
@@ -206,16 +217,19 @@ namespace supdef
         void do_stage1();
         void do_stage2();
         void do_stage3();
+        void do_stage4();
 
         enum output_kind : uint_fast8_t
         {
-            text =     1U << 0,
-            tokens =   1U << 1,
-            ast =      1U << 2,
-            original = 1U << 3,
+            text     = 1U << 0,
+            tokens   = 1U << 1,
+            ast      = 1U << 2,
+            imports  = 1U << 3,
+            original = 1U << 7,
             all = text
                 | tokens
                 | ast
+                | imports
                 | original
         };
 
@@ -229,15 +243,10 @@ namespace supdef
             return *m_file.filename() <=> *rhs.m_file.filename();
         }
     private:
-        using supdef_map_type =
-            std::unordered_multimap<
-                std::u32string,
-                ::supdef::parser::registered_supdef,
-                ::supdef::detail::xxhash<std::u32string, 64>
-            >;
+        using supdef_map_type = umultimap<std::u32string, registered_supdef>;
         source_file m_file;
         std::list<token> m_tokens;
-        std::set<parser, parser_compare> m_imported_parsers;
+        std::set<parser> m_imported_parsers;
         supdef_map_type m_supdefs;
     };
 }
