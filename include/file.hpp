@@ -55,7 +55,8 @@ namespace supdef
     class source_file
     {
     public:
-        source_file(const std::filesystem::path& filename);
+        source_file(const stdfs::path& filename);
+        source_file(stdfs::path&& filename);
         ~source_file();
 
         std::u32string& data() noexcept;

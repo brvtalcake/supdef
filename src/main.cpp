@@ -5,6 +5,7 @@
 #include <file.hpp>
 #include <init.hpp>
 #include <unicode.hpp>
+#include <detail/globals.hpp>
 
 #include <iostream>
 #include <filesystem>
@@ -31,173 +32,13 @@
 
 #include <argparse/argparse.hpp>
 
-namespace stdfs = std::filesystem;
+#include <boost/preprocessor/config/config.hpp>
+#include <boost/preprocessor/limits.hpp>
+#include <boost/preprocessor/repetition/repeat.hpp>
+#include <boost/preprocessor/repetition/repeat_from_to.hpp>
+#include <boost/preprocessor/stringize.hpp>
 
-#if 0
-static int get_term_line_length(void)
-{
-    struct winsize w;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-    return w.ws_col;
-}
-
-static decltype(auto) positional_opts(void)
-{
-    namespace po = boost::program_options;
-    
-    static po::positional_options_description positionals;
-    static po::options_description corresp("options corresponding to positional arguments", get_term_line_length());
-    
-    static std::once_flag once;
-    std::call_once(once, []{
-        positionals.add("input-file", 1);
-        corresp.add_options()
-            ("input-file", po::value<std::string>(), "input file")
-            ;
-    });
-    
-    std::pair ret{ positionals, corresp };
-    return ret;
-}
-
-static decltype(auto) misc_opts(void)
-{
-    namespace po = boost::program_options;
-    
-    static po::options_description misc("miscellaneous options", get_term_line_length());
-    
-    static std::once_flag once;
-    std::call_once(once, []{
-        misc.add_options()
-            ("help,h", "produce help message")
-            ("version,v", "print version")
-            ;
-    });
-    
-    return misc;
-}
-
-static decltype(auto) stage_opts(void)
-{
-    namespace po = boost::program_options;
-    
-    static po::options_description stages("stage options", get_term_line_length());
-    
-    static std::once_flag once;
-    std::call_once(once, []{
-        stages.add_options()
-            ("stage1", "run stage 1")
-            ("stage2", "run stage 2")
-            ("stage3", "run stage 3")
-            ("all", "run all stages")
-            ;
-    });
-    
-    return stages;
-}
-
-static decltype(auto) output_opts(void)
-{
-    namespace po = boost::program_options;
-    
-    static po::options_description output("output options", get_term_line_length());
-    
-    static std::once_flag once;
-    std::call_once(once, []{
-        output.add_options()
-            ("output-file,o", po::value<std::string>()->default_value("output.txt"), "output file")
-            ("tokens", "output tokens")
-            ("ast", "output ast")
-            ;
-    });
-    
-    return output;
-}
-
-static decltype(auto) parse_cmdline(int argc, char const* const* argv)
-{
-    namespace po = boost::program_options;
-    
-    po::options_description printed_opts("supdef options", get_term_line_length());
-    printed_opts.add(misc_opts());
-    printed_opts.add(stage_opts());
-    printed_opts.add(output_opts());
-    
-    std::pair positionals(positional_opts());
-    po::options_description all_opts(printed_opts);
-    all_opts.add(positionals.second);
-
-    auto usage =
-        [&printed_opts, &positionals](std::ostream& os, const char* progname = "supdef") -> void
-        {
-            using namespace std::string_literals;
-
-            std::string usage_prefix = "usage: "s + progname + " [supdef options] ";
-
-            const std::vector<boost::shared_ptr<po::option_description>>& opts = positionals.second.options();
-            unsigned positional_count = opts.size();
-            std::vector<std::string> explanations(positional_count);
-            size_t max_len = 0;
-
-            for (unsigned i = 0; i < positional_count; ++i)
-            {
-                const std::string& opt_name = opts.at(i)->long_name();
-
-                if (i > 0)
-                    usage_prefix.push_back(' ');
-                usage_prefix.append("<"s + opt_name + ">"s);
-
-                explanations[i].append(2, ' ');
-                explanations[i].append("<"s + opt_name + ">"s);
-
-                max_len = std::max(max_len, explanations[i].size());
-            }
-
-            for (unsigned i = 0; i < positional_count; ++i)
-            {
-                const std::string& opt_expl = opts.at(i)->description();
-
-                explanations[i].append(max_len - explanations[i].size(), ' ');
-                explanations[i].append("  "s + opt_expl);
-            }
-            usage_prefix.append("\n\n");
-            usage_prefix.append("positional arguments:\n");
-            usage_prefix.append(
-                std::accumulate(
-                    explanations.begin(), explanations.end(), ""s,
-                    [](const std::string& acc, const std::string& s) { return acc + s + '\n'; }
-                )
-            );
-            os << usage_prefix << '\n';
-            os << printed_opts << '\n';
-        };
-        
-    po::variables_map vm;
-    po::store(po::command_line_parser(argc, argv).options(all_opts).positional(positionals.first).run(), vm);
-    po::notify(vm);
-
-    if (vm.count("help"))
-    {
-        usage(std::cout, argv[0]);
-        ::exit(EXIT_SUCCESS);
-    }
-    if (vm.count("version"))
-    {
-        std::cout << "supdef version " << SUPDEF_VERSION_STRING << "\n";
-        ::exit(EXIT_SUCCESS);
-    }
-
-    if (vm.count("input-file") != 1)
-    {
-        std::cerr << "no input file specified\n";
-        usage(std::cerr, argv[0]);
-        ::exit(EXIT_FAILURE);
-    }
-
-    return vm;
-}
-
-#else
+GLOBAL_GETTER_DECL(std::vector<stdfs::path>, supdef_import_paths)
 
 struct cmdline
 {
@@ -222,15 +63,52 @@ static ::cmdline supdef_cmdline{
     .verbosity = 0
 };
 
+static consteval std::string consteval_stringize(unsigned i)
+{
+    switch (i)
+    {
+#undef  __MACRO
+#define __MACRO(z, n, data) case n: return BOOST_PP_STRINGIZE(n);
+
+#ifndef __INTELLISENSE__
+    BOOST_PP_REPEAT_FROM_TO(0, BOOST_PP_LIMIT_MAG, __MACRO, ~);
+#else
+    BOOST_PP_REPEAT_FROM_TO(0, 10, __MACRO, ~);
+#endif
+#undef  __MACRO
+    default: return "???";
+    }
+}
+
+static consteval std::string generate_stage_numbers_string()
+{
+    std::string ret;
+    for (unsigned i = 1; i < SUPDEF_MAX_PARSING_PHASE; ++i)
+    {
+        if (i > 1)
+            ret += ", ";
+        ret += consteval_stringize(i);
+    }
+    ret += " or " + consteval_stringize(SUPDEF_MAX_PARSING_PHASE);
+    return ret;
+}
+
+constexpr std::string SUPDEF_STAGE_NUMBERS = generate_stage_numbers_string();
+
 static void parse_cmdline(int argc, char const* const* argv)
 {
+#if 0
     supdef_cmdline.progname = argv[0];
+#else
+    supdef_cmdline.progname = program_invocation_short_name;
+#endif
+
     argparse::ArgumentParser progargs(supdef_cmdline.progname, SUPDEF_VERSION_STRING, argparse::default_arguments::help);
     progargs.add_description("supdef - a simple preprocessor for (and written in) C/C++");
 
     progargs.add_argument("-V", "--version")
         .help("print version info and exit")
-        .action([](const std::string& value) -> void {
+        .action([](...) noexcept -> void {
             std::cout << "supdef version " << SUPDEF_VERSION_STRING << '\n';
             ::exit(EXIT_SUCCESS);
         })
@@ -238,16 +116,55 @@ static void parse_cmdline(int argc, char const* const* argv)
         .flag()
         .nargs(0)
         ;
+    progargs.add_argument("-I", "--import")
+        .help("add a directory to the import search path")
+        .action([](const std::string& value) noexcept -> void {
+            try
+            {    
+                ::supdef::globals::get_supdef_import_paths().push_back(
+                    stdfs::canonical(value)
+                );
+            }
+            catch (const stdfs::filesystem_error& e)
+            {
+                using namespace std::string_literals;
+                supdef::printer::fatal(
+                    "failed to add import path `"s + e.path1().string() + "`: "s +
+                    e.code().message()
+                );
+                ::exit(EXIT_FAILURE);
+            }
+            catch (const std::exception& e)
+            {
+                using namespace std::string_literals;
+                supdef::printer::fatal(
+                    "failed to add import path `"s + value + "`: "s +
+                    e.what()
+                );
+                ::exit(EXIT_FAILURE);
+            }
+            catch (...)
+            {
+                using namespace std::string_literals;
+                supdef::printer::fatal(
+                    "failed to add import path `"s + value + "`: unknown error"
+                );
+                ::exit(EXIT_FAILURE);
+            }
+        })
+        .nargs(1)
+        .metavar("<import-path>")
+        ;
     progargs.add_argument("-v", "--verbose")
         .help("increase verbosity")
-        .action([](const std::string& value) -> void { ++supdef_cmdline.verbosity; })
+        .action([&](...) noexcept -> void { ++supdef_cmdline.verbosity; })
         .append()
         .flag()
         .nargs(0)
         ;
     progargs.add_argument("-q", "--quiet")
         .help("decrease verbosity")
-        .action([](const std::string& value) -> void { --supdef_cmdline.verbosity; })
+        .action([&](...) noexcept -> void { --supdef_cmdline.verbosity; })
         .append()
         .flag()
         .nargs(0)
@@ -258,17 +175,22 @@ static void parse_cmdline(int argc, char const* const* argv)
         .scan<'u', unsigned>()
         .metavar("<stage-number>")
         ;
-    progargs.add_argument("-k", "--tokens")
-        .help("output tokens")
+    progargs.add_argument("--output-tokens")
+        .help("output tokenized content")
         .flag()
         .nargs(0)
         ;
-    progargs.add_argument("-t", "--ast")
+    progargs.add_argument("--output-ast")
         .help("output ast")
         .flag()
         .nargs(0)
         ;
-    progargs.add_argument("-O", "--original")
+    progargs.add_argument("--output-imports")
+        .help("output imported files")
+        .flag()
+        .nargs(0)
+        ;
+    progargs.add_argument("--output-original")
         .help("output original content")
         .flag()
         .nargs(0)
@@ -313,22 +235,29 @@ static void parse_cmdline(int argc, char const* const* argv)
         if (supdef_cmdline.stop_after_stage > SUPDEF_MAX_PARSING_PHASE || supdef_cmdline.stop_after_stage == 0U)
         {
             using namespace std::string_literals;
-            supdef::printer::fatal("invalid stage number: "s + std::to_string(supdef_cmdline.stop_after_stage) + " (must be 1, 2, or 3)");
+            supdef::printer::fatal(
+                "invalid stage number: "s + std::to_string(supdef_cmdline.stop_after_stage) +
+                " (must be "+ SUPDEF_STAGE_NUMBERS + ")"
+            );
             ::exit(EXIT_FAILURE);
         }
     }
     else
         supdef_cmdline.stop_after_stage = SUPDEF_MAX_PARSING_PHASE;
 
-    if (progargs.is_used("-k"))
+    if (progargs.is_used("--output-tokens"))
         supdef_cmdline.output_kind = ::supdef::parser::output_kind(
             supdef_cmdline.output_kind | ::supdef::parser::output_kind::tokens
         );
-    if (progargs.is_used("-t"))
+    if (progargs.is_used("--output-ast"))
         supdef_cmdline.output_kind = ::supdef::parser::output_kind(
             supdef_cmdline.output_kind | ::supdef::parser::output_kind::ast
         );
-    if (progargs.is_used("-O"))
+    if (progargs.is_used("--output-imports"))
+        supdef_cmdline.output_kind = ::supdef::parser::output_kind(
+            supdef_cmdline.output_kind | ::supdef::parser::output_kind::imports
+        );
+    if (progargs.is_used("--output-original"))
         supdef_cmdline.output_kind = ::supdef::parser::output_kind(
             supdef_cmdline.output_kind | ::supdef::parser::output_kind::original
         );
@@ -337,7 +266,7 @@ static void parse_cmdline(int argc, char const* const* argv)
             supdef_cmdline.output_kind | ::supdef::parser::output_kind::all
         );
 }
-#endif
+
 
 static int old_main(int argc, char const* argv[]);
 static int real_main(int argc, char const* argv[]);
@@ -431,6 +360,12 @@ static int real_main(int argc, char const* argv[])
         return 0;
     }
     parser.do_stage3();
+    if (supdef_cmdline.stop_after_stage == 3U)
+    {
+        parser.output_to(supdef_cmdline.output_file, supdef_cmdline.output_kind);
+        return 0;
+    }
+    parser.do_stage4();
     parser.output_to(supdef_cmdline.output_file, supdef_cmdline.output_kind);
     return 0;
 }

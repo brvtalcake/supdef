@@ -38,7 +38,7 @@ function cmd()
 }
 
 define LIBS "icu-io" "libgrapheme" "simdutf" "gmp" "mpfr"
-define CPPFLAGS "-Iinclude -D_GNU_SOURCE=1 -DSTATIC_INITIALIZER_ALLOCATION=1"
+define CPPFLAGS "-Iinclude -D_GNU_SOURCE=1 -DSTATIC_INITIALIZER_ALLOCATION=1 -DBOOST_PP_LIMIT_MAG=1024 -DBOOST_PP_LIMIT_FOR=1024 -DBOOST_PP_LIMIT_REPEAT=1024 -DBOOST_PP_LIMIT_ITERATION=1024"
 if [ -z "$OPTIMIZE" ] || [ "$OPTIMIZE" -eq 0 ]; then
     define CFLAGS "$(expand_libs cflags) -pipe -std=gnu++23 -Wall -Wextra -Og -ggdb3 -march=native -mtune=native -flto"
 else

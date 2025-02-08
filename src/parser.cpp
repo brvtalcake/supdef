@@ -16,13 +16,26 @@ GLOBAL_GETTER_DECL(
     std::vector<std::shared_ptr<const stdfs::path>>,
     already_processed_files
 );
+
 GLOBAL_GETTER_DECL(
-    BOOST_IDENTITY_TYPE((::supdef::detail::xxhash<std::u32string, 64>)),
-    u32string_xxhasher
+    std::vector<stdfs::path>, supdef_import_paths
 );
 
+GLOBAL_XXHASHER_DECL(std::u32string, 64, u32string);
+GLOBAL_XXHASHER_DECL(std::u16string, 64, u16string);
+GLOBAL_XXHASHER_DECL(std::u8string, 64, u8string);
+GLOBAL_XXHASHER_DECL(std::string, 64, string);
+GLOBAL_XXHASHER_DECL(std::wstring, 64, wstring);
+GLOBAL_XXHASHER_DECL(stdfs::path, 64, path);
+
 supdef::parser::parser(const stdfs::path& filename)
-    : m_file(stdfs::canonical(filename)), m_tokens(), m_imported_parsers(), m_supdefs(32, ::supdef::globals::get_u32string_xxhasher())
+    : m_file(stdfs::canonical(filename)), m_tokens(), m_imported_parsers(), m_supdefs(32, ::supdef::globals::get_xxhasher<supdef_map_type::key_type, 64UL>())
+{
+    ::supdef::globals::get_already_processed_files().push_back(m_file.filename());
+}
+
+supdef::parser::parser(stdfs::path&& filename)
+    : m_file(stdfs::canonical(std::move(filename))), m_tokens(), m_imported_parsers(), m_supdefs(32, ::supdef::globals::get_xxhasher<supdef_map_type::key_type, 64UL>())
 {
     ::supdef::globals::get_already_processed_files().push_back(m_file.filename());
 }
@@ -132,43 +145,286 @@ void ::supdef::parser::do_stage3()
     }
 }
 
+namespace
+{
+    template <typename IterT>
+    concept points_to_token = std::same_as<typename std::iterator_traits<IterT>::value_type, ::supdef::token>;
+
+    template <typename IterT>
+    concept points_to_token_and_bidir = points_to_token<IterT> && std::bidirectional_iterator<IterT>;
+
+    template <typename IterT>
+    concept points_to_token_and_fwd = points_to_token<IterT> && std::forward_iterator<IterT>;
+
+    template <typename IterT>
+    concept points_to_token_and_input = points_to_token<IterT> && std::input_iterator<IterT>;
+
+    template <typename FnT, typename IterT>
+    concept predicate = std::predicate<FnT, ::supdef::token> ||
+                        std::predicate<FnT, IterT>;
+    
+    template <typename FnT, typename IterT>
+    concept invokeable = std::invocable<FnT, ::supdef::token> ||
+                         std::invocable<FnT, IterT>;
+
+    static bool at_start_of_line(const points_to_token_and_bidir auto iter, const points_to_token_and_bidir auto begin)
+    {
+        auto cpy = iter;
+        if (cpy == begin)
+            return true;
+        std::advance(cpy, -1);
+        while (cpy != begin && cpy->kind != ::supdef::token_kind::newline)
+        {
+            if (cpy->kind != ::supdef::token_kind::horizontal_whitespace)
+                return false;
+            std::advance(cpy, -1);
+        }
+        return true;
+    }
+
+    static size_t skipws(points_to_token_and_input auto& iter, const points_to_token_and_input auto end, bool skip_newlines = false)
+    {
+        size_t count = 0;
+        while (iter != end &&
+                (iter->kind == ::supdef::token_kind::horizontal_whitespace ||
+                    (skip_newlines && iter->kind == ::supdef::token_kind::newline)))
+        {
+            std::advance(iter, 1);
+            count++;
+        }
+        return count;
+    }
+
+    template <typename IterT, typename PredT>
+        requires points_to_token_and_input<IterT> && predicate<PredT, IterT>
+    static size_t skip_until(IterT& iter, const IterT end, PredT pred)
+    {
+        size_t count = 0;
+        if constexpr (std::invocable<PredT, IterT>)
+        {
+            while (iter != end && !pred(iter))
+            {
+                std::advance(iter, 1);
+                count++;
+            }
+        }
+        else
+        {
+            while (iter != end && !pred(*iter))
+            {
+                std::advance(iter, 1);
+                count++;
+            }
+        }
+        return count;
+    }
+
+    template <typename IterT>
+        requires points_to_token_and_input<IterT>
+    static size_t skip_until(IterT& iter, const IterT end, ::supdef::token_kind kind)
+    {
+        return skip_until(iter, end, [kind](const ::supdef::token& tok) {
+            return tok.kind == kind;
+        });
+    }
+
+    template <typename IterT, typename PredT, typename FnT>
+        requires points_to_token_and_input<IterT> && predicate<PredT, IterT> && invokeable<FnT&&, IterT>
+    static size_t skip_until(IterT& iter, const IterT end, PredT pred, FnT&& fn)
+    {
+        size_t count = 0;
+        FnT fncpy = std::forward<FnT>(fn);
+        if constexpr (std::invocable<PredT, IterT>)
+        {
+            while (iter != end && !pred(iter))
+            {
+                if constexpr (std::invocable<FnT&&, IterT>)
+                    std::invoke(fncpy, iter);
+                else
+                    std::invoke(fncpy, *iter);
+                std::advance(iter, 1);
+                count++;
+            }
+        }
+        else
+        {
+            while (iter != end && !pred(*iter))
+            {
+                if constexpr (std::invocable<FnT&&, IterT>)
+                    std::invoke(fncpy, iter);
+                else
+                    std::invoke(fncpy, *iter);
+                std::advance(iter, 1);
+                count++;
+            }
+        }
+        return count;
+    }
+    
+    template <typename IterT, typename FnT>
+        requires points_to_token_and_input<IterT> && invokeable<FnT&&, IterT>
+    static size_t skip_until(IterT& iter, const IterT end, ::supdef::token_kind kind, FnT&& fn)
+    {
+        return skip_until(iter, end, [kind](const ::supdef::token& tok) {
+            return tok.kind == kind;
+        }, std::forward<FnT>(fn));
+    }
+}
+
 // process imports
 void ::supdef::parser::do_stage4()
 {
+    std::string errmsg;
+    ::supdef::token errtok;
+    const auto& orig_data = m_file.original_data();
+
     for (auto token = m_tokens.cbegin(); token != m_tokens.cend(); std::advance(token, 1))
     {
+        if (token->kind != token_kind::at)
+            continue;
+        if (!at_start_of_line(token, m_tokens.cbegin()))
+            continue;
+
+        const auto import_start = token;
+        std::remove_const_t<decltype(import_start)> import_end;
+
+        std::advance(token, 1);
+        skipws(token, m_tokens.cend());
         if (token->kind != token_kind::keyword)
             continue;
-        if (token->keyword != keyword::import_)
+        if (token->keyword != keyword_kind::import)
             continue;
-        auto next_token = std::next(token);
-        while (next_token != m_tokens.cend() && next_token->kind == token_kind::horizontal_whitespace)
-            std::advance(next_token, 1);
-        if (next_token == m_tokens.cend())
-        {
-            printer::error(
-                "unexpected end of file while parsing import statement",
-                *token, m_file.original_data(), &format
+
+        std::advance(token, 1);
+        if (skipws(token, m_tokens.cend()) == 0)
+            printer::warning(
+                "missing whitespace after import keyword",
+                *token, orig_data, &format
             );
-            return;
+        if (token == m_tokens.cend())
+        {
+            errmsg = "unexpected end of file while parsing import statement";
+            errtok = *std::prev(token);
+            goto error;
         }
+
         stdfs::path extracted_path;
-        switch (next_token->kind)
+        token_kind pathkind = token->kind;
+        switch (token->kind)
         {
         case token_kind::string_literal:
-            extracted_path = stdfs::path(next_token->data.value());
+            extracted_path = std::move(token->data.value());
+            skip_until(token, m_tokens.cend(), token_kind::newline);
+            import_end = token;
             break;
         case token_kind::langle: {
+            const auto langle = token;
+            std::u32string tmppath;
+            
+            std::advance(token, 1);
+            skip_until(
+                token, m_tokens.cend(), token_kind::rangle,
+                [&tmppath](const ::supdef::token& tok) {
+                    tmppath += tok.data.value();
+                }
+            );
+            if (token == m_tokens.cend())
+            {
+                errmsg = "unexpected end of file while parsing import statement";
+                errtok = *langle;
+                goto error;
+            }
 
+            extracted_path = std::move(tmppath);
+            skip_until(token, m_tokens.cend(), token_kind::newline);
+            import_end = token;
         } break;
         default:
-            printer::error(
-                "unexpected token while parsing import statement",
-                *next_token, m_file.original_data(), &format
-            );
-            return;
+            errmsg = "unexpected token while parsing import statement";
+            errtok = *token;
+            goto fatal;
+        }
+
+        if (extracted_path.empty())
+        {
+            errmsg = "empty path in import statement";
+            errtok = *import_start;
+            goto fatal;
+        }
+
+        m_tokens.erase(import_start, import_end);
+
+        if (!this->add_child_parser(extracted_path, pathkind))
+        {
+            errmsg = "failed to import file `" + extracted_path.string() + "`: file not found";
+            errtok = *import_start;
+            goto error;
         }
     }
+
+    return;
+
+error:
+    printer::error(
+        errmsg, errtok, orig_data, &format
+    );
+    return;
+
+fatal:
+    printer::fatal(
+        errmsg, errtok, orig_data, &format
+    );
+    ::exit(EXIT_FAILURE);
+}
+
+[[__nodiscard__]]
+bool ::supdef::parser::add_child_parser(const stdfs::path& filename, ::supdef::token_kind pathtype) noexcept
+{
+    bool inserted;
+
+    if (filename.is_absolute() && stdfs::exists(filename))
+    {
+        std::tie(std::ignore, inserted) = m_imported_parsers.emplace(filename);
+        if (!inserted)
+            printer::warning(
+                "file `" + filename.string() + "` already imported",
+                *m_tokens.begin(), m_file.original_data(), &format
+            );
+        return true;
+    }
+
+    const auto& import_paths = ::supdef::globals::get_supdef_import_paths();
+    
+    if (pathtype == ::supdef::token_kind::string_literal)
+    {
+        const stdfs::path import_from = m_file.filename()->parent_path();
+        if (stdfs::exists(import_from / filename))
+        {
+            std::tie(std::ignore, inserted) = m_imported_parsers.emplace(import_from / filename);
+            if (!inserted)
+                printer::warning(
+                    "file `" + (import_from / filename).string() + "` already imported",
+                    *m_tokens.begin(), m_file.original_data(), &format
+                );
+            return true;
+        }
+    }
+
+    for (const auto& imppath : import_paths)
+    {
+        if (stdfs::exists(imppath / filename))
+        {
+            std::tie(std::ignore, inserted) = m_imported_parsers.emplace(imppath / filename);
+            if (!inserted)
+                printer::warning(
+                    "file `" + (imppath / filename).string() + "` already imported",
+                    *m_tokens.begin(), m_file.original_data(), &format
+                );
+            return true;
+        }
+    }
+
+    return false;
 }
 
 namespace
@@ -276,6 +532,21 @@ void ::supdef::parser::output_to(std::ostream& os, output_kind kind)
     if (kind & output_kind::ast)
     {
         // TODO: implement
+    }
+    if (kind & output_kind::imports)
+    {
+        const auto& processed = ::supdef::globals::get_already_processed_files();
+        os << "imported files:\n";
+        if (processed.size() > 1)
+        {
+            for (auto&& file : processed)
+            {
+                if (file != m_file.filename())
+                    os << "  " << file->string() << '\n';
+            }
+        }
+        else
+            os << "  none\n";
     }
     if (kind & output_kind::original)
         os << format(m_file.original_data());

@@ -12,10 +12,21 @@ private:
 
 #include <tokenizer.hpp>
 #include <unicode.hpp>
+#include <detail/ckd_arith.hpp>
 
 #include <simdutf.h>
 
 #include <boost/preprocessor.hpp>
+
+#undef  __CKD_DISTANCE
+#define __CKD_DISTANCE(memb, ...)   \
+    ::supdef::checked_cast<         \
+        decltype(                   \
+            std::declval<           \
+                ::supdef::token_loc \
+            >().memb                \
+        )                           \
+    >(std::distance(__VA_ARGS__))
 
 namespace
 {
@@ -116,7 +127,8 @@ namespace
                 .line = s.line,         \
                 .column = s.col,        \
                 .infile_offset =        \
-                    std::distance(      \
+                    __CKD_DISTANCE(     \
+                        infile_offset,  \
                         s.start,        \
                         s.next          \
                     ),                  \
@@ -174,7 +186,7 @@ namespace
                     .filename = s.filename,
                     .line = s.line,
                     .column = s.col,
-                    .infile_offset = std::distance(s.start, s.next),
+                    .infile_offset = __CKD_DISTANCE(infile_offset, s.start, s.next),
                     .toksize = 1
                 },
                 .data = std::u32string(1, *s.next),
@@ -216,7 +228,7 @@ namespace
                     .filename = s.filename,
                     .line = line_start,
                     .column = col_start,
-                    .infile_offset = std::distance(s.start, s.next) - count - 2,
+                    .infile_offset = __CKD_DISTANCE(infile_offset, s.start, s.next) - count - 2,
                     .toksize = count + 2
                 },
                 .data = std::u32string(buffer, count),
@@ -253,7 +265,7 @@ namespace
                     .filename = s.filename,
                     .line = line_start,
                     .column = col_start,
-                    .infile_offset = std::distance(s.start, s.next) - count - 2,
+                    .infile_offset = __CKD_DISTANCE(infile_offset, s.start, s.next) - count - 2,
                     .toksize = count + 2
                 },
                 .data = buffer,
@@ -277,8 +289,8 @@ namespace
                         .filename = s.filename,
                         .line = line_start,
                         .column = col_start,
-                        .infile_offset = std::distance(s.start, cpy),
-                        .toksize = std::distance(cpy, s.next)
+                        .infile_offset = __CKD_DISTANCE(infile_offset, s.start, cpy),
+                        .toksize = __CKD_DISTANCE(toksize, cpy, s.next)
                     },
                     .data = std::u32string(cpy + 2, s.next),
                     .keyword = std::nullopt,
@@ -297,8 +309,8 @@ namespace
                         .filename = s.filename,
                         .line = line_start,
                         .column = col_start,
-                        .infile_offset = std::distance(s.start, cpy),
-                        .toksize = std::distance(cpy, s.next)
+                        .infile_offset = __CKD_DISTANCE(infile_offset, s.start, cpy),
+                        .toksize = __CKD_DISTANCE(toksize, cpy, s.next)
                     },
                     .data = std::u32string(cpy + 2, s.next),
                     .keyword = std::nullopt,
@@ -319,8 +331,8 @@ namespace
                             .filename = s.filename,
                             .line = line_start,
                             .column = col_start,
-                            .infile_offset = std::distance(s.start, cpy),
-                            .toksize = std::distance(cpy, s.next)
+                            .infile_offset = __CKD_DISTANCE(infile_offset, s.start, cpy),
+                            .toksize = __CKD_DISTANCE(toksize, cpy, s.next)
                         },
                         .data = std::u32string(cpy + 1, s.next),
                         .keyword = std::nullopt,
@@ -334,7 +346,7 @@ namespace
                         .filename = s.filename,
                         .line = line_start,
                         .column = col_start,
-                        .infile_offset = std::distance(s.start, cpy),
+                        .infile_offset = __CKD_DISTANCE(infile_offset, s.start, cpy),
                         .toksize = 1
                     },
                     .data = std::u32string(1, U'0'),
@@ -372,8 +384,8 @@ namespace
                         .filename = s.filename,
                         .line = line_start,
                         .column = col_start,
-                        .infile_offset = std::distance(s.start, cpy),
-                        .toksize = std::distance(cpy, s.next)
+                        .infile_offset = __CKD_DISTANCE(infile_offset, s.start, cpy),
+                        .toksize = __CKD_DISTANCE(toksize, cpy, s.next)
                     },
                     .data = std::u32string(cpy, s.next),
                     .keyword = std::nullopt,
@@ -387,8 +399,8 @@ namespace
                     .filename = s.filename,
                     .line = line_start,
                     .column = col_start,
-                    .infile_offset = std::distance(s.start, cpy),
-                    .toksize = std::distance(cpy, s.next)
+                    .infile_offset = __CKD_DISTANCE(infile_offset, s.start, cpy),
+                    .toksize = __CKD_DISTANCE(toksize, cpy, s.next)
                 },
                 .data = std::u32string(cpy, s.next),
                 .keyword = std::nullopt,
@@ -530,7 +542,7 @@ namespace
                         .filename = s.filename,
                         .line = line_start,
                         .column = col_start,
-                        .infile_offset = std::distance(s.start, beginning),
+                        .infile_offset = __CKD_DISTANCE(infile_offset, s.start, beginning),
                         .toksize = max_size_matched
                     },
                     .data = keywords[max_size_matched_index].kw,
@@ -568,8 +580,8 @@ namespace
                     .filename = s.filename,
                     .line = line_start,
                     .column = col_start,
-                    .infile_offset = std::distance(s.start, start),
-                    .toksize = std::distance(start, s.next)
+                    .infile_offset = __CKD_DISTANCE(infile_offset, s.start, start),
+                    .toksize = __CKD_DISTANCE(toksize, start, s.next)
                 },
                 .data = std::u32string(start, s.next),
                 .keyword = std::nullopt,
@@ -590,7 +602,7 @@ namespace
                     .filename = s.filename,
                     .line = s.line,
                     .column = s.col,
-                    .infile_offset = std::distance(s.start, s.next),
+                    .infile_offset = __CKD_DISTANCE(infile_offset, s.start, s.next),
                     .toksize = 1
                 },
                 .data = std::u32string(1, U'\\'),
@@ -612,7 +624,7 @@ namespace
                     .filename = s.filename,
                     .line = s.line,
                     .column = s.col,
-                    .infile_offset = std::distance(s.start, s.next),
+                    .infile_offset = __CKD_DISTANCE(infile_offset, s.start, s.next),
                     .toksize = 1
                 },
                 .data = std::u32string(1, U'\n'),
@@ -643,8 +655,8 @@ namespace
                         .filename = s.filename,
                         .line = line_start,
                         .column = col_start,
-                        .infile_offset = std::distance(s.start, start),
-                        .toksize = std::distance(start, s.next)
+                        .infile_offset = __CKD_DISTANCE(infile_offset, s.start, start),
+                        .toksize = __CKD_DISTANCE(toksize, start, s.next)
                     },
                     .data = std::u32string(start, s.next),
                     .keyword = std::nullopt,
@@ -664,8 +676,8 @@ namespace
                         .filename = s.filename,
                         .line = line_start,
                         .column = col_start,
-                        .infile_offset = std::distance(s.start, start),
-                        .toksize = std::distance(start, s.next)
+                        .infile_offset = __CKD_DISTANCE(infile_offset, s.start, start),
+                        .toksize = __CKD_DISTANCE(toksize, start, s.next)
                     },
                     .data = std::u32string(start, s.next),
                     .keyword = std::nullopt,
@@ -689,7 +701,7 @@ namespace
                     .line = s.line,
                     .column = s.col,
                     // let's make it 1-sized although it's not
-                    .infile_offset = std::distance(s.start, s.end) - 1,
+                    .infile_offset = __CKD_DISTANCE(infile_offset, s.start, s.end) - 1,
                     // let's make it 1-sized although it's not
                     .toksize = 1
                 },
@@ -746,7 +758,7 @@ namespace
                 .filename = s.filename,
                 .line = s.line,
                 .column = s.col,
-                .infile_offset = std::distance(s.start, s.next),
+                .infile_offset = __CKD_DISTANCE(infile_offset, s.start, s.next),
                 .toksize = 1
             },
             .data = std::u32string(1, *s.next),

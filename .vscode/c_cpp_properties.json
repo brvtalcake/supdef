@@ -34,7 +34,11 @@
                 "_FORTIFY_SOURCE=2",
                 "_LARGEFILE_SOURCE=1",
                 "_TIME_BITS=64",
-                "STATIC_INITIALIZER_ALLOCATION=1"
+                "STATIC_INITIALIZER_ALLOCATION=1",
+                "BOOST_PP_LIMIT_MAG=1024",
+                "BOOST_PP_LIMIT_FOR=1024",
+                "BOOST_PP_LIMIT_REPEAT=1024",
+                "BOOST_PP_LIMIT_ITERATION=1024"
             ],
             "compilerPath": "/usr/bin/g++",
             "cStandard": "gnu23",

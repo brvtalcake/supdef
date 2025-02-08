@@ -68,7 +68,6 @@ namespace supdef
             }
 
         public:
-            xxhash() = delete;
             xxhash(std::optional<__uint128_t> seed = std::nullopt)
                 : m_seed(seed)
             {
@@ -103,7 +102,6 @@ namespace supdef
             }
 
         public:
-            xxhash() = delete;
             xxhash(std::optional<uint64_t> seed = std::nullopt)
                 : m_seed(seed)
             {
@@ -138,7 +136,6 @@ namespace supdef
             }
 
         public:
-            xxhash() = delete;
             xxhash(std::optional<uint32_t> seed = std::nullopt)
                 : m_seed(seed)
             {

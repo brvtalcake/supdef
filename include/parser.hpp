@@ -2,7 +2,7 @@
 #define PARSER_HPP
 
 #include <types.hpp>
-#include <directives.hpp>
+#include <interpreter.hpp>
 #include <file.hpp>
 #include <unicode.hpp>
 #include <tokenizer.hpp>
@@ -189,6 +189,9 @@ namespace supdef
 
         friend parser_compare;
 
+        [[__nodiscard__]]
+        bool add_child_parser(const stdfs::path& filename, token_kind pathtype) noexcept;
+
     public:
         struct registered_supdef
         {
@@ -198,6 +201,7 @@ namespace supdef
             static constexpr options parse_options(const std::u32string& str)
             {
                 // for now, no options are supported
+                (void)str;
                 return options::none;
             }
 
@@ -212,6 +216,7 @@ namespace supdef
         };
 
         parser(const stdfs::path& filename);
+        parser(stdfs::path&& filename);
         ~parser();
 
         void do_stage1();
@@ -240,7 +245,11 @@ namespace supdef
 
         parser_compare::ret_type operator<=>(const parser& rhs) const
         {
-            return *m_file.filename() <=> *rhs.m_file.filename();
+            auto thispath = *m_file.filename();
+            auto rhspath  = *rhs.m_file.filename();
+            assert(thispath.is_absolute());
+            assert(rhspath.is_absolute());
+            return thispath <=> rhspath;
         }
     private:
         using supdef_map_type = umultimap<std::u32string, registered_supdef>;

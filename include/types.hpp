@@ -6,7 +6,6 @@
 #include <source_location>
 #include <filesystem>
 #include <ranges>
-#include <views>
 #include <map>
 #include <unordered_map>
 #include <set>
@@ -15,6 +14,16 @@
 #include <execution>
 #include <cstddef>
 #include <cstdint>
+
+#include <boost/preprocessor/config/config.hpp>
+static_assert(
+    BOOST_PP_IS_STANDARD(),
+    "supdef requires a standard-compliant preprocessor"
+);
+static_assert(
+    BOOST_PP_VARIADICS,
+    "supdef requires variadic macro support"
+);
 
 #include <boost/multiprecision/gmp.hpp>
 
@@ -29,6 +38,9 @@
 #include <experimental/scope>
 
 #include <detail/xxhash.hpp>
+
+#define DO_PRAGMA(x) _Pragma (#x)
+#define TODO(...) DO_PRAGMA(message ("TODO - " #__VA_ARGS__))
 
 namespace stdexec = std::execution;
 namespace stdfs = ::std::filesystem;

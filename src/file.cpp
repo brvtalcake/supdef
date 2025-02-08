@@ -29,7 +29,7 @@
     return ret;
 } */
 
-supdef::source_file::source_file(const std::filesystem::path& filename)
+::supdef::source_file::source_file(const stdfs::path& filename)
     : m_orig(), m_data(), m_filename(std::make_shared<const stdfs::path>(filename))
 {
     int fd = ::open(filename.c_str(), O_RDONLY);
@@ -68,6 +68,49 @@ supdef::source_file::source_file(const std::filesystem::path& filename)
     if (len32 == 0)
         throw std::runtime_error("failed to convert file to utf32, or empty file");
 
+    m_orig = std::u32string(buf.get(), len32);
+    m_data = m_orig;
+}
+
+::supdef::source_file::source_file(stdfs::path&& filename)
+    : m_orig(), m_data(), m_filename(std::make_shared<const stdfs::path>(std::move(filename)))
+{
+    int fd = ::open(m_filename->c_str(), O_RDONLY);
+    if (fd == -1)
+        throw std::runtime_error("failed to open file");
+
+    bool closedfd = false;
+    stdx::scope_exit close_fd(
+        [&fd, &closedfd] {
+            if (closedfd)
+                return;
+            ::close(fd);
+            closedfd = true;
+        }
+    );
+    file_lock flock{fd, false};
+
+    struct ::stat st;
+    if (::fstat(fd, &st) == -1)
+        throw std::runtime_error("failed to get file size");
+
+    char* fbuf = static_cast<char*>(alloca(st.st_size + 1));
+    ssize_t len = ::read(fd, fbuf, st.st_size);
+    if (len == -1)
+        throw std::runtime_error("failed to read file");
+    fbuf[len] = '\0';
+
+    flock.release();
+
+    /* m_orig = simdutf::convert_utf8_to_utf32(fbuf, len); */
+    // TODO: add support for more encoding types
+    // TODO: could probably also use std::wbuffer_convert
+    //char32_t* buf = new char32_t[len];
+    std::unique_ptr<char32_t[]> buf(new char32_t[len]);
+    size_t len32 = simdutf::convert_utf8_to_utf32(fbuf, len, buf.get());
+    if (len32 == 0)
+        throw std::runtime_error("failed to convert file to utf32, or empty file");
+    
     m_orig = std::u32string(buf.get(), len32);
     m_data = m_orig;
 }

@@ -53,7 +53,7 @@
     namespace supdef {                                  \
         namespace globals {                             \
             template <>                                 \
-            extern type& GLOBAL_CAT(get_, name)         \
+            type& GLOBAL_CAT(get_, name)                \
                 __VA_ARGS__ ()                          \
                 noexcept;                               \
         }                                               \
@@ -99,7 +99,24 @@
         xxhasher, <type, hashsize>                      \
     )
 
+#undef  __XXHASHER_VARNAME
+#define __XXHASHER_VARNAME(type, hashsize, ...)         \
+    BOOST_PP_IF(                                        \
+        BOOST_PP_IS_EMPTY(__VA_ARGS__),                 \
+        BOOST_PP_CAT(                                   \
+            type, BOOST_PP_CAT(                         \
+                _xxhasher, hashsize                     \
+            )                                           \
+        ),                                              \
+        BOOST_PP_CAT(                                   \
+            __VA_ARGS__, BOOST_PP_CAT(                  \
+                _xxhasher, hashsize                     \
+            )                                           \
+        )                                               \
+    )
+
 #undef  GLOBAL_XXHASHER_DEF
+#if 0
 #define GLOBAL_XXHASHER_DEF(type, hashsize, ...)            \
     BOOST_PP_TUPLE_REM_CTOR(                                \
         BOOST_PP_IF(                                        \
@@ -161,7 +178,8 @@
     namespace supdef {                                      \
         namespace globals {                                 \
             template <>                                     \
-            type& get_xxhasher<type, hashsize> ()           \
+            ::supdef::detail::xxhash<type, hashsize>&       \
+            get_xxhasher<type, hashsize> ()                 \
                 noexcept                                    \
             {                                               \
                 return BOOST_PP_IF(                         \
@@ -180,12 +198,49 @@
                                 _xxhasher, hashsize         \
                             )                               \
                         )                                   \
-                    )),                                     \
+                    ))                                      \
                 )();                                        \
             }                                               \
         }                                                   \
     }
-
+#else
+#define GLOBAL_XXHASHER_DEF(type, hashsize, ...)            \
+    GLOBAL_DEF_START(                                       \
+        BOOST_IDENTITY_TYPE((                               \
+            ::supdef::detail::xxhash<                       \
+                type, hashsize                              \
+            >                                               \
+        )),                                                 \
+        __XXHASHER_VARNAME(type, hashsize, __VA_ARGS__)     \
+    )                                                       \
+        __XXHASHER_VARNAME(type, hashsize, __VA_ARGS__) =   \
+            ::supdef::detail::xxhash<type, hashsize>(       \
+                seed_with_time()                            \
+            );                                              \
+    GLOBAL_DEF_END(                                         \
+        BOOST_IDENTITY_TYPE((                               \
+            ::supdef::detail::xxhash<                       \
+                type, hashsize                              \
+            >                                               \
+        )),                                                 \
+        __XXHASHER_VARNAME(type, hashsize, __VA_ARGS__)     \
+    )                                                       \
+    namespace supdef {                                      \
+        namespace globals {                                 \
+            template <>                                     \
+            ::supdef::detail::xxhash<type, hashsize>&       \
+            get_xxhasher<type, hashsize> ()                 \
+                noexcept                                    \
+            {                                               \
+                return BOOST_PP_CAT(                        \
+                    get_, __XXHASHER_VARNAME(               \
+                        type, hashsize, __VA_ARGS__         \
+                    )                                       \
+                )();                                        \
+            }                                               \
+        }                                                   \
+    }
+#endif
 //GLOBAL_XXHASHER_DECL(BOOST_IDENTITY_TYPE((std::vector<std::string, std::pmr::polymorphic_allocator<std::string>>)), 64, vector_string)
 //GLOBAL_XXHASHER_DEF (BOOST_IDENTITY_TYPE((std::vector<std::string, std::pmr::polymorphic_allocator<std::string>>)), 64, vector_string)
 
