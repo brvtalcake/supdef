@@ -25,16 +25,23 @@
 
 namespace supdef
 {
-    // TODO: class for supdef and runnable directives
-
-    // { currently invoked supdef name, variable name }
-    using sdvarname = std::pair<std::u32string, std::u32string>;
+    using sdinteger = bigint;
+    using sdfloat   = bigfloat;
+    using sdstring  = std::u32string;
+    using sdtokens  = std::list<token>;
 
     using sdatom = std::variant<
-        bigint,                      // integer
-        bigfloat,                    // float
-        std::u32string               // string
+        sdinteger,  // integer
+        sdfloat,    // float
+        sdstring,   // string
+        sdtokens    // tokens
     >;
+
+    class sdvector
+    {
+    };
+
+#if 0
     class sdcomposite;
 
     using sdvariable = std::variant<
@@ -62,12 +69,8 @@ namespace supdef
         var_type m_variables;
         kind m_kind;
     };
+#endif
 
-    class supdef_interpreter_state
-    {
-    private:
-        std::map<sdvarname, sdatom> m_variables;
-    };
 }
 
 #endif

@@ -415,39 +415,49 @@ namespace
     static maybe_state match_keyword(state& s)
     {
 #undef  __KWD_KIND_LIST
-#define __KWD_KIND_LIST         \
-    supdef, import, runnable,   \
-    embed, dump, set, if_,      \
-    elseif, else_, endif,       \
-    for_, end, join, split,     \
-    str, unstr, len, math,      \
-    begin, unset, foreach,      \
-    foreachi, raw
+#define __KWD_KIND_LIST             \
+    import, embed, dump,            \
+                                    \
+    supdef, runnable,               \
+    begin, end,                     \
+                                    \
+    set, unset,                     \
+                                    \
+    if_, elseif, else_, endif,      \
+    for_, endfor,                   \
+    foreach, foreachi, endforeach,  \
+                                    \
+    join, split,                    \
+    str, unstr,                     \
+    len, math,                      \
+    raw
 
 #undef  __KWD_LIST
 #define __KWD_LIST(sep) \
-    supdef sep()        \
     import sep()        \
-    runnable sep()      \
     embed sep()         \
     dump sep()          \
+    supdef sep()        \
+    runnable sep()      \
+    begin sep()         \
+    end sep()           \
     set sep()           \
+    unset sep()         \
     if sep()            \
     elseif sep()        \
     else sep()          \
     endif sep()         \
     for sep()           \
-    end sep()           \
+    endfor sep()        \
+    foreach sep()       \
+    foreachi sep()      \
+    endforeach sep()    \
     join sep()          \
     split sep()         \
     str sep()           \
     unstr sep()         \
     len sep()           \
     math sep()          \
-    begin sep()         \
-    unset sep()         \
-    foreach sep()       \
-    foreachi sep()      \
     raw
 
 #undef  __KWD_FOREACH
@@ -490,7 +500,7 @@ namespace
         )->size();
         
         struct {
-            const std::u32string kw;
+            const std::u32string_view kw;
             size_t matched;
             supdef::keyword_kind kw_kind;
             bool matched_so_far;
@@ -545,7 +555,7 @@ namespace
                         .infile_offset = __CKD_DISTANCE(infile_offset, s.start, beginning),
                         .toksize = max_size_matched
                     },
-                    .data = keywords[max_size_matched_index].kw,
+                    .data = keywords[max_size_matched_index].kw.data(),
                     .keyword = keywords[max_size_matched_index].kw_kind,
                     .kind = supdef::token_kind::keyword
                 };

@@ -362,6 +362,169 @@ void ::supdef::parser::do_stage4()
         }
     }
 
+    TODO(
+        iterate over imported parsers to process imports and retrieve supdefs
+        (i.e. go through stage 1 to stage 5)
+    );
+
+    return;
+
+error:
+    printer::error(
+        errmsg, errtok, orig_data, &format
+    );
+    return;
+
+fatal:
+    printer::fatal(
+        errmsg, errtok, orig_data, &format
+    );
+    ::exit(EXIT_FAILURE);
+}
+
+std::optional<
+    std::pair<
+        ::supdef::parser::registered_supdef::options, std::u32string
+    >
+> supdef::parser::parse_supdef_start(
+    std::list<token>::const_iterator line_start,
+    std::list<token>::const_iterator line_end,
+    const std::u32string& origdata
+)
+{
+    using ret_type = std::optional<std::pair<registered_supdef::options, std::u32string>>;
+
+    registered_supdef::options opts;
+    std::u32string name;
+    size_t skipped;
+    auto tok = line_start;
+
+    skipws(tok, line_end);
+    if (tok == line_end || tok->kind != token_kind::at)
+        return std::nullopt;
+
+    std::advance(tok, 1);
+    skipws(tok, line_end);
+    if (tok == line_end || tok->kind != token_kind::keyword || tok->keyword != keyword_kind::supdef)
+        return std::nullopt;
+
+    std::advance(tok, 1);
+    skipped = skipws(tok, line_end);
+    if (tok == line_end)
+        return std::nullopt;
+    if (skipped == 0)
+        printer::warning(
+            "missing whitespace after @supdef keyword",
+            *tok, origdata, &format
+        );
+    
+    if (tok->kind == token_kind::keyword && tok->keyword == keyword_kind::begin)
+        opts = registered_supdef::options::none;
+    else
+    {
+        std::u32string optstring;
+        skip_until(
+            tok, line_end, token_kind::horizontal_whitespace,
+            [&optstring](const ::supdef::token& tok) {
+                optstring += tok.data.value();
+            }
+        );
+        if (tok == line_end)
+        {
+            printer::error(
+                "unexpected end of line while parsing @supdef options",
+                *std::prev(tok), origdata, &format
+            );
+            return std::nullopt;
+        }
+        if (tok->kind != token_kind::keyword || tok->keyword != keyword_kind::begin)
+        {
+            printer::error(
+                "missing @supdef begin keyword",
+                *tok, origdata, &format
+            );
+            return std::nullopt;
+        }
+        opts = registered_supdef::parse_options(optstring);
+    }
+
+    std::advance(tok, 1);
+    skipped = skipws(tok, line_end);
+    if (tok == line_end)
+    {
+        printer::error(
+            "unexpected end of line while parsing @supdef name",
+            *std::prev(tok), origdata, &format
+        );
+        return std::nullopt;
+    }
+    if (skipped == 0)
+        printer::warning(
+            "missing whitespace after @supdef begin keyword",
+            *tok, origdata, &format
+        );
+    if (tok->kind != token_kind::identifier)
+    {
+        printer::error(
+            "expected identifier after @supdef begin keyword",
+            *tok, origdata, &format
+        );
+        return std::nullopt;
+    }
+    name = std::move(tok->data.value());
+
+    std::advance(tok, 1);
+    skipws(tok, line_end);
+    if (tok != line_end)
+    {
+        printer::warning(
+            "unexpected tokens after @supdef begin keyword",
+            *tok, origdata, &format
+        );
+    }
+
+    return std::make_pair(opts, name);
+}
+
+std::optional<
+    std::tuple<
+        ::supdef::parser::registered_runnable::lang,
+        ::supdef::parser::registered_runnable::options,
+        std::u32string
+    >
+> supdef::parser::parse_runnable_start(
+    std::list<token>::const_iterator line_start,
+    std::list<token>::const_iterator line_end,
+    const std::u32string& origdata
+)
+{
+    // TODO
+    return std::nullopt;
+}
+
+/*
+ * supdefs format (optional spaces are omitted):
+ *     ^@supdef <options>? begin <name>$
+ *         <supdef-body>
+ *     ^@end$
+ *
+ * runnable format (optional spaces are omitted):
+ *     ^@runnable <language> <options>? begin <name>$
+ *         <runnable-body>
+ *     ^@end$
+ */
+// retrieve supdefs and runnables
+void ::supdef::parser::do_stage5()
+{
+    std::string errmsg;
+    ::supdef::token errtok;
+    const auto& orig_data = m_file.original_data();
+
+    for (auto token = m_tokens.cbegin(); token != m_tokens.cend(); std::advance(token, 1))
+    {
+
+    }
+
     return;
 
 error:

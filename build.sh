@@ -2,8 +2,6 @@
 
 set -e
 
-files="$(find -L src -name '*.cpp' | xargs)"
-
 function is_defined()
 {
     if [ -z ${!1+x} ]; then
@@ -31,29 +29,76 @@ function expand_libs()
     done
 }
 
+# given a path, strip the first directory
+# e.g. foo/bar/baz -> bar/baz
+function strip_first_dir()
+{
+    printf '%s' "${1#*/}"
+}
+
+function map()
+{
+    local _fn="$1"
+    shift
+    printf '%s' "$($_fn $1)"
+    shift
+    for arg in "$@"; do
+        printf ' %s' "$($_fn $arg)"
+    done
+}
+
+function strip_first_dir_if_starts_with()
+{
+    local _prefix="$1"
+    local _path="$2"
+    if [[ "$_path" == "$_prefix"* ]]; then
+        strip_first_dir "$_path"
+    else
+        printf '%s' "$_path"
+    fi
+}
+
+function mk_objfile()
+{
+    local _file="${1%.cpp}"
+    printf 'obj/%s.o' "$(strip_first_dir_if_starts_with src/ $_file)"
+}
+
 function cmd()
 {
     echo "$@"
     eval "$@"
 }
 
+function mk_tmp_jobfile()
+{
+    local _jobfile="$(mktemp -t parallel.jobfile.XXXXXXXXXX.txt)"
+    printf '%s' "$_jobfile"
+}
+
+files="$(find -L src -name '*.cpp' -o -name '*.cc' | xargs)"
+#objfiles="$(map strip_first_dir_if_starts_with src/ $(find -L src -name '*.cpp' -o -name '*.cc' | xargs))"
+
+jobfile="$(mk_tmp_jobfile)"
+trap "rm -f $jobfile" EXIT
+
 define LIBS "icu-io" "libgrapheme" "simdutf" "gmp" "mpfr"
 define CPPFLAGS "-Iinclude -D_GNU_SOURCE=1 -DSTATIC_INITIALIZER_ALLOCATION=1 -DBOOST_PP_LIMIT_MAG=1024 -DBOOST_PP_LIMIT_FOR=1024 -DBOOST_PP_LIMIT_REPEAT=1024 -DBOOST_PP_LIMIT_ITERATION=1024"
 if [ -z "$OPTIMIZE" ] || [ "$OPTIMIZE" -eq 0 ]; then
-    define CFLAGS "$(expand_libs cflags) -pipe -std=gnu++23 -Wall -Wextra -Og -ggdb3 -march=native -mtune=native -flto"
+    define CFLAGS "$(expand_libs cflags) -fdiagnostics-color=always -pipe -std=gnu++23 -Wall -Wextra -Og -ggdb3 -march=native -mtune=native -flto"
 else
-    define CFLAGS "$(expand_libs cflags) -pipe -std=gnu++23 -Wall -Wextra -O3 -march=native -mtune=native -flto"
+    define CFLAGS "$(expand_libs cflags) -fdiagnostics-color=always -pipe -std=gnu++23 -Wall -Wextra -O3 -march=native -mtune=native -flto"
 fi
-#define CFLAGS "$(expand_libs cflags) -std=gnu++23 -Wall -Wextra -Og -ggdb3"
-#define CFLAGS "$(expand_libs cflags) -std=gnu++23 -Wall -Wextra -O0 -ggdb3"
 define LDFLAGS "$(expand_libs libs) -L/usr/local/lib -lgrapheme -lboost_filesystem"
 
 cmd rm -rf obj
 
 for file in $files; do
-    cmd mkdir -p "obj/$(dirname $file)"
-    cmd g++ $CPPFLAGS $CFLAGS -c $file -o "obj/${file%.cpp}.o"
+    cmd mkdir -p "$(dirname "$(mk_objfile $file)")"
+    echo g++ $CPPFLAGS $CFLAGS -c $file -o "$(mk_objfile $file)" \; >> $jobfile
 done
+
+cmd parallel --joblog parallel.log -j`nproc` < $jobfile
 
 cmd g++ $CFLAGS $(find -L obj -name '*.o') -o main $LDFLAGS
 #/usr/bin/g++ /usr/local/lib/libgrapheme.a $(find -L obj -name '*.o') -o main

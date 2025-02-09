@@ -52,6 +52,30 @@ namespace stdext = ::__gnu_cxx;
 namespace booststl = ::boost::stl_interfaces;
 namespace boostmp  = ::boost::multiprecision;
 
+#undef  PACKED_STRUCT
+#undef  PACKED_CLASS
+#undef  PACKED_UNION
+#undef  PACKED_ENUM
+#ifdef __has_cpp_attribute
+# if __has_cpp_attribute(__packed__)
+#  define PACKED_STRUCT(name) struct [[__packed__]] name
+#  define PACKED_CLASS(name) class [[__packed__]] name
+#  define PACKED_UNION(name) union [[__packed__]] name
+#  define PACKED_ENUM(name) enum [[__packed__]] name
+# endif
+#endif
+#if !defined(PACKED_STRUCT) && defined(__has_attribute)
+# if __has_attribute(__packed__)
+#  define PACKED_STRUCT(name) struct [[__gnu__::__packed__]] name
+#  define PACKED_CLASS(name) class [[__gnu__::__packed__]] name
+#  define PACKED_UNION(name) union [[__gnu__::__packed__]] name
+#  define PACKED_ENUM(name) enum [[__gnu__::__packed__]] name
+# endif
+#endif
+#if !defined(PACKED_STRUCT)
+# error "no PACKED_{STRUCT,CLASS,...} macros defined"
+#endif
+
 namespace supdef
 {
     using bigint = boostmp::mpz_int;

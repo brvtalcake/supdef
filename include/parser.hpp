@@ -15,6 +15,7 @@
 #include <utility>
 #include <generator>
 #include <string>
+#include <string_view>
 #include <optional>
 #include <memory>
 #include <iostream>
@@ -24,9 +25,12 @@
 #include <stdexcept>
 #include <map>
 #include <variant>
+#include <regex>
 
 #include <unicode/ustream.h>
 #include <unicode/unistr.h>
+
+#include <boost/logic/tribool.hpp>
 
 namespace supdef
 {
@@ -189,21 +193,35 @@ namespace supdef
 
         friend parser_compare;
 
+        template <typename ParsedT>
+        using parser_return = std::tuple<
+            std::list<token>::const_iterator,
+            std::list<token>::const_iterator,
+            std::optional<ParsedT>
+        >;
+
         [[__nodiscard__]]
         bool add_child_parser(const stdfs::path& filename, token_kind pathtype) noexcept;
 
     public:
         struct registered_supdef
         {
-            enum options
-            { none };
+        private:
+            // true if bool opt is true
+            // false if bool opt is false
+            // indeterminate if bool opt is not present
+            static constexpr boost::logic::tribool parse_bool_opt(
+                std::u32string_view sv, std::u32string_view opt
+            );
 
-            static constexpr options parse_options(const std::u32string& str)
+        public:
+            struct options
             {
-                // for now, no options are supported
-                (void)str;
-                return options::none;
-            }
+                unsigned eat_newlines : 1;
+                static constexpr options none = { 0U };
+            };
+
+            static constexpr options parse_options(const std::u32string& str);
 
             constexpr auto operator<=>(const registered_supdef& rhs) const
             {
@@ -215,14 +233,120 @@ namespace supdef
             options opts;
         };
 
+        struct registered_runnable
+        {
+        private:
+            // true if bool opt is true
+            // false if bool opt is false
+            // indeterminate if bool opt is not present
+            static constexpr boost::logic::tribool parse_bool_opt(
+                std::u32string_view sv, std::u32string_view opt
+            );
+
+        public:
+            TODO(make it possible to use e.g. "@pragma compiler_path C <path>");
+            TODO(change {compiler,interpreter}_opts to {compiler,interpreter}_cmdline);
+            struct lang
+            {
+                // the standard / version used / needed
+                std::u32string version;
+
+                // the compiler and interpreter used, if needed
+                stdfs::path    compiler,
+                            interpreter;
+
+                // the options if needed
+                std::vector<std::u32string>    compiler_opts,
+                                            interpreter_opts;
+
+                // the language used
+                enum
+                {
+                    c, cpp, rust,
+                    csharp, fsharp,
+                    java,
+                    ocaml, racket,
+                    python, shell
+                } ident;
+            };
+
+            PACKED_STRUCT(options)
+            {
+                enum class mode : unsigned
+                {
+                    compileok  = 0b00,
+                    trycompile = compileok,
+
+                    runok      = 0b01,
+                    tryrun     = runok,
+
+                    getoutput  = 0b10,
+
+                    retval     = 0b11
+                };
+                unsigned eat_newlines : 1;
+                unsigned mode : 2;
+                
+                static constexpr options none = { 0U, mode::trycompile };
+            };
+
+            static constexpr options parse_options(const std::u32string& str);
+            static constexpr lang parse_lang(const std::u32string& str);
+
+            constexpr auto operator<=>(const registered_supdef& rhs) const
+            {
+                return std::tie(name, opts) <=> std::tie(rhs.name, rhs.opts);
+            }
+
+            std::vector<std::vector<::supdef::token>> lines;
+            std::u32string name;
+            options opts;
+        };
+    
+    private:
+        static std::optional<std::pair<registered_supdef::options, std::u32string>>
+        parse_supdef_start(
+            std::list<token>::const_iterator line_start,
+            std::list<token>::const_iterator line_end,
+            const std::u32string& origdata
+        );
+
+        static std::optional<
+            std::tuple<registered_runnable::lang, registered_runnable::options, std::u32string>
+        >
+        parse_runnable_start(
+            std::list<token>::const_iterator line_start,
+            std::list<token>::const_iterator line_end,
+            const std::u32string &origdata
+        );
+
+        static bool parse_supdef_runnable_end(
+            std::list<token>::const_iterator line_start,
+            std::list<token>::const_iterator line_end,
+            const std::u32string& origdata
+        );
+
+    public:
+
         parser(const stdfs::path& filename);
         parser(stdfs::path&& filename);
         ~parser();
 
+        // tokenize the file
         void do_stage1();
+        // splice lines
         void do_stage2();
+        // remove comments
         void do_stage3();
+        // process imports
         void do_stage4();
+        // retrieve supdefs and runnables
+        void do_stage5();
+        // substitute supdefs, runnables or builtin functions (e.g. @math, @len, ...) calls
+        // substitute @set variables
+        void do_stage6();
+        // process @embed and @dump calls
+        void do_stage7();
 
         enum output_kind : uint_fast8_t
         {
@@ -259,5 +383,7 @@ namespace supdef
         supdef_map_type m_supdefs;
     };
 }
+
+#include <impl/parser.tpp>
 
 #endif
