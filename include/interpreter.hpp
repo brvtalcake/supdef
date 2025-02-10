@@ -25,52 +25,35 @@
 
 namespace supdef
 {
-    using sdinteger = bigint;
-    using sdfloat   = bigfloat;
-    using sdstring  = std::u32string;
-    using sdtokens  = std::list<token>;
-
-    using sdatom = std::variant<
-        sdinteger,  // integer
-        sdfloat,    // float
-        sdstring,   // string
-        sdtokens    // tokens
-    >;
-
-    class sdvector
+    namespace interpreter
     {
-    };
+        /* using sdinteger = bigint;
+        using sdfloat   = bigfloat;
+        using sdstring  = std::u32string;
+        using sdtokens  = std::list<token>;
 
-#if 0
-    class sdcomposite;
+        using sdatom = std::variant<
+            sdinteger,  // integer
+            sdfloat,    // float
+            sdstring,   // string
+            sdtokens    // tokens
+        >; */
 
-    using sdvariable = std::variant<
-        sdatom,
-        sdcomposite
-    >;
-
-    class sdcomposite
-    {
-    public:
-        enum class kind
+        class basic_templated_block
         {
-            tuple,   // (tokens, tokens, ...)
-            list,    // [tokens, tokens, ...]
-            set,     // {tokens, tokens, ...}
-            map      // {tokens: tokens, tokens: tokens, ...}
-        };
-    private:
-        using var_type = std::variant<
-            std::vector<sdvariable>,
-            std::list<sdvariable>,
-            std::map<sdvariable, sdvariable>,
-            uset<sdvariable>
-        >;
-        var_type m_variables;
-        kind m_kind;
-    };
-#endif
+            public:
+                virtual ~basic_templated_block() = default;
+                
+                virtual std::u32string to_string(
+                    const std::vector<token>& args
+                ) const = 0;
+            
+            protected:
+                basic_templated_block() = default;
 
+                std::vector<token> m_template;
+        };
+    }
 }
 
 #endif

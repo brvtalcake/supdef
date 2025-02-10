@@ -362,24 +362,28 @@ void ::supdef::parser::do_stage4()
         }
     }
 
-    TODO(
-        iterate over imported parsers to process imports and retrieve supdefs
-        (i.e. go through stage 1 to stage 5)
-    );
-
-    return;
-
-error:
-    printer::error(
-        errmsg, errtok, orig_data, &format
-    );
-    return;
+    goto end;
 
 fatal:
     printer::fatal(
         errmsg, errtok, orig_data, &format
     );
     ::exit(EXIT_FAILURE);
+
+error:
+    printer::error(
+        errmsg, errtok, orig_data, &format
+    );
+
+end:
+    for (parser& p : m_imported_parsers)
+    {
+        p.do_stage1();
+        p.do_stage2();
+        p.do_stage3();
+        p.do_stage4();
+        p.do_stage5();
+    }
 }
 
 std::optional<
@@ -502,6 +506,34 @@ std::optional<
     return std::nullopt;
 }
 
+bool ::supdef::parser::parse_supdef_runnable_end(
+    std::list<token>::const_iterator line_start,
+    std::list<token>::const_iterator line_end,
+    const std::u32string& origdata
+)
+{
+    auto tok = line_start;
+
+    skipws(tok, line_end);
+    if (tok == line_end || tok->kind != token_kind::at)
+        return false;
+    
+    std::advance(tok, 1);
+    skipws(tok, line_end);
+    if (tok == line_end || tok->kind != token_kind::keyword || tok->keyword != keyword_kind::end)
+        return false;
+
+    std::advance(tok, 1);
+    skipws(tok, line_end);
+    if (tok != line_end)
+        printer::warning(
+            "unexpected tokens after @end keyword",
+            *tok, origdata, &format
+        );
+
+    return true;
+}
+
 /*
  * supdefs format (optional spaces are omitted):
  *     ^@supdef <options>? begin <name>$
@@ -513,6 +545,7 @@ std::optional<
  *         <runnable-body>
  *     ^@end$
  */
+// (for now, ignore runnables)
 // retrieve supdefs and runnables
 void ::supdef::parser::do_stage5()
 {
@@ -520,9 +553,74 @@ void ::supdef::parser::do_stage5()
     ::supdef::token errtok;
     const auto& orig_data = m_file.original_data();
 
-    for (auto token = m_tokens.cbegin(); token != m_tokens.cend(); std::advance(token, 1))
+    auto token = m_tokens.cbegin();
+    while (token != m_tokens.cend())
     {
+        auto line_start = token;
+        auto line_end = std::find_if(
+            token, m_tokens.cend(),
+            [](const ::supdef::token& tok) {
+                return tok.kind == token_kind::newline;
+            }
+        );
+        if (line_end == m_tokens.cend())
+            break; // can't have a one-line supdef or runnable
 
+        auto supdef_start = parse_supdef_start(line_start, line_end, orig_data);
+        if (supdef_start)
+        {
+            registered_supdef sd;
+            sd.opts = std::move(std::get<0>(*supdef_start));
+            sd.name = std::move(std::get<1>(*supdef_start));
+
+            // remove line
+            m_tokens.erase(line_start, line_end);
+            token = line_start;
+
+            // append lines of tokens while not end of supdef
+            do
+            {
+                line_start = token;
+                line_end = std::find_if(
+                    token, m_tokens.cend(),
+                    [](const ::supdef::token& tok) {
+                        return tok.kind == token_kind::newline;
+                    }
+                );
+                if (line_end == m_tokens.cend())
+                {
+                    errmsg = "unexpected end of file while parsing supdef";
+                    errtok = *std::prev(token);
+                    goto error;
+                }
+
+                if (parse_supdef_runnable_end(line_start, line_end, orig_data))
+                    break;
+
+                std::vector<::supdef::token> line;
+                std::copy(line_start, line_end, std::back_inserter(line));
+                sd.lines.push_back(std::move(line));
+                m_tokens.erase(line_start, line_end);
+                token = line_start;
+            } while (token != m_tokens.cend());
+
+            // remove end of supdef
+            if (!parse_supdef_runnable_end(token, m_tokens.cend(), orig_data))
+            {
+                errmsg = "missing @end keyword after supdef";
+                errtok = *std::prev(token);
+                goto error;
+            }
+            m_tokens.erase(line_start, line_end);
+
+            bool inserted;
+            std::tie(std::ignore, inserted) = m_supdefs.emplace(sd.name, std::move(sd));
+            if (!inserted)
+                printer::warning(
+                    "supdef `" + format(sd.name) + "` already defined",
+                    *line_start, orig_data, &format
+                );
+        }
     }
 
     return;

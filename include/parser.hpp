@@ -164,6 +164,13 @@ namespace supdef
 #undef  __FATAL
     }
 
+    struct registered_base
+    {
+        static constexpr boost::logic::tribool parse_bool_opt(
+            std::u32string_view sv, std::u32string_view opt
+        );
+    };
+
     class parser
     {
         struct parser_compare
@@ -205,68 +212,60 @@ namespace supdef
 
     public:
         struct registered_supdef
+            : private registered_base
         {
-        private:
-            // true if bool opt is true
-            // false if bool opt is false
-            // indeterminate if bool opt is not present
-            static constexpr boost::logic::tribool parse_bool_opt(
-                std::u32string_view sv, std::u32string_view opt
-            );
-
-        public:
-            struct options
+            PACKED_STRUCT(options)
             {
                 unsigned eat_newlines : 1;
-                static constexpr options none = { 0U };
+                static constexpr inline options none { 0U };
             };
 
             static constexpr options parse_options(const std::u32string& str);
 
-            constexpr auto operator<=>(const registered_supdef& rhs) const
-            {
-                return std::tie(name, opts) <=> std::tie(rhs.name, rhs.opts);
-            }
-
-            std::vector<std::vector<::supdef::token>> lines;
-            std::u32string name;
             options opts;
+            std::u32string name;
+            std::vector<std::vector<::supdef::token>> lines;
         };
 
         struct registered_runnable
+            : private registered_base
         {
-        private:
-            // true if bool opt is true
-            // false if bool opt is false
-            // indeterminate if bool opt is not present
-            static constexpr boost::logic::tribool parse_bool_opt(
-                std::u32string_view sv, std::u32string_view opt
-            );
-
-        public:
             TODO(make it possible to use e.g. "@pragma compiler_path C <path>");
             TODO(change {compiler,interpreter}_opts to {compiler,interpreter}_cmdline);
             struct lang
             {
+                struct cmdline_source_placeholder { };
+                struct cmdline_executable_placeholder { };
+                struct cmdline_compiler_placeholder { };
+                struct cmdline_interpreter_placeholder { };
+            
+            private:
+                using cmdline_args_type = std::variant<
+                    cmdline_source_placeholder,
+                    cmdline_executable_placeholder,
+                    cmdline_compiler_placeholder,
+                    cmdline_interpreter_placeholder,
+                    std::u32string
+                >;
+
+            public:
                 // the standard / version used / needed
                 std::u32string version;
 
                 // the compiler and interpreter used, if needed
-                stdfs::path    compiler,
-                            interpreter;
+                std::optional<stdfs::path> compiler, interpreter;
 
                 // the options if needed
-                std::vector<std::u32string>    compiler_opts,
-                                            interpreter_opts;
+                std::vector<cmdline_args_type> compiler_cmdline, execution_cmdline;
 
                 // the language used
                 enum
                 {
-                    c, cpp, rust,
+                    c, cpp, rust, d, zig,
                     csharp, fsharp,
                     java,
-                    ocaml, racket,
-                    python, shell
+                    ocaml, racket, haskell,
+                    python, shell, perl, ruby
                 } ident;
             };
 
@@ -287,20 +286,16 @@ namespace supdef
                 unsigned eat_newlines : 1;
                 unsigned mode : 2;
                 
-                static constexpr options none = { 0U, mode::trycompile };
+                static constexpr inline options none { 0U, mode::trycompile };
             };
 
             static constexpr options parse_options(const std::u32string& str);
             static constexpr lang parse_lang(const std::u32string& str);
 
-            constexpr auto operator<=>(const registered_supdef& rhs) const
-            {
-                return std::tie(name, opts) <=> std::tie(rhs.name, rhs.opts);
-            }
-
-            std::vector<std::vector<::supdef::token>> lines;
-            std::u32string name;
+            lang langinfo;
             options opts;
+            std::u32string name;
+            std::vector<std::vector<::supdef::token>> lines;
         };
     
     private:
@@ -320,7 +315,8 @@ namespace supdef
             const std::u32string &origdata
         );
 
-        static bool parse_supdef_runnable_end(
+        static bool
+        parse_supdef_runnable_end(
             std::list<token>::const_iterator line_start,
             std::list<token>::const_iterator line_end,
             const std::u32string& origdata
@@ -376,7 +372,8 @@ namespace supdef
             return thispath <=> rhspath;
         }
     private:
-        using supdef_map_type = umultimap<std::u32string, registered_supdef>;
+        using supdef_map_type   = umap<std::u32string, registered_supdef>;
+        using runnable_map_type = umap<std::u32string, registered_runnable>;
         source_file m_file;
         std::list<token> m_tokens;
         std::set<parser> m_imported_parsers;

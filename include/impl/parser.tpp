@@ -28,7 +28,7 @@ supdef::parser::registered_supdef::parse_options(const std::u32string& str)
     return static_cast<opts_type>(opts);
 }
 
-constexpr boost::logic::tribool supdef::parser::registered_supdef::parse_bool_opt(
+constexpr boost::logic::tribool supdef::registered_base::parse_bool_opt(
     std::u32string_view sv, std::u32string_view opt)
 {
     using namespace std::string_view_literals;
