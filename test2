@@ -1,0 +1,16 @@
+
+
+
+
+
+supdefs:
+  in file /home/axel/Documents/programmation/c++/supdef/text
+    testé
+          @let a = @len($1)
+          @let b = @len($2)
+      #define SUM @math($a + $b)
+  in file /home/axel/Documents/programmation/c++/supdef/text2
+    testé2
+          @let a = @len($1)
+          @let b = @len($2)
+      #define SUM @math($a + $b)

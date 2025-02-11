@@ -217,7 +217,6 @@ namespace supdef
             PACKED_STRUCT(options)
             {
                 unsigned eat_newlines : 1;
-                static constexpr inline options none { 0U };
             };
 
             static constexpr options parse_options(const std::u32string& str);
@@ -285,8 +284,6 @@ namespace supdef
                 };
                 unsigned eat_newlines : 1;
                 unsigned mode : 2;
-                
-                static constexpr inline options none { 0U, mode::trycompile };
             };
 
             static constexpr options parse_options(const std::u32string& str);
@@ -346,16 +343,23 @@ namespace supdef
 
         enum output_kind : uint_fast8_t
         {
-            text     = 1U << 0,
-            tokens   = 1U << 1,
-            ast      = 1U << 2,
-            imports  = 1U << 3,
-            original = 1U << 7,
-            all = text
-                | tokens
-                | ast
-                | imports
-                | original
+            text      = 1U << 0,
+            tokens    = 1U << 1,
+            ast       = 1U << 2,
+            imports   = 1U << 3,
+            supdefs   = 1U << 4,
+            recursive = 1U << 6,
+            original  = 1U << 7,
+
+            recursive_supdefs = supdefs
+                              | recursive,
+            all               = text
+                              | tokens
+                              | ast
+                              | imports
+                              | supdefs
+                              | recursive
+                              | original
         };
 
         void output_to(std::ostream& os, output_kind kind = text);

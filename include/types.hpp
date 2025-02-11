@@ -57,7 +57,7 @@ namespace boostmp  = ::boost::multiprecision;
 #undef  PACKED_UNION
 #undef  PACKED_ENUM
 #ifdef __has_cpp_attribute
-# if __has_cpp_attribute(__packed__)
+# if __has_cpp_attribute(__packed__) && 0
 #  define PACKED_STRUCT(name) struct [[__packed__]] name
 #  define PACKED_CLASS(name) class [[__packed__]] name
 #  define PACKED_UNION(name) union [[__packed__]] name

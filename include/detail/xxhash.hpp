@@ -12,6 +12,7 @@
 #if 0
 #define XXH_INLINE_ALL 1
 #else
+#define XXH_INLINE_ALL 1
 #define XXH_NAMESPACE supdef_xxhash_impl_
 #endif
 #include <xxhash.h>

@@ -190,6 +190,16 @@ static void parse_cmdline(int argc, char const* const* argv)
         .flag()
         .nargs(0)
         ;
+    progargs.add_argument("--output-supdefs")
+        .help("output supdefs")
+        .flag()
+        .nargs(0)
+        ;
+    progargs.add_argument("--output-recursive")
+        .help("output recursively from imported files")
+        .flag()
+        .nargs(0)
+        ;
     progargs.add_argument("--output-original")
         .help("output original content")
         .flag()
@@ -256,6 +266,14 @@ static void parse_cmdline(int argc, char const* const* argv)
     if (progargs.is_used("--output-imports"))
         supdef_cmdline.output_kind = ::supdef::parser::output_kind(
             supdef_cmdline.output_kind | ::supdef::parser::output_kind::imports
+        );
+    if (progargs.is_used("--output-supdefs"))
+        supdef_cmdline.output_kind = ::supdef::parser::output_kind(
+            supdef_cmdline.output_kind | ::supdef::parser::output_kind::supdefs
+        );
+    if (progargs.is_used("--output-recursive"))
+        supdef_cmdline.output_kind = ::supdef::parser::output_kind(
+            supdef_cmdline.output_kind | ::supdef::parser::output_kind::recursive
         );
     if (progargs.is_used("--output-original"))
         supdef_cmdline.output_kind = ::supdef::parser::output_kind(
@@ -366,6 +384,12 @@ static int real_main(int argc, char const* argv[])
         return 0;
     }
     parser.do_stage4();
+    if (supdef_cmdline.stop_after_stage == 4U)
+    {
+        parser.output_to(supdef_cmdline.output_file, supdef_cmdline.output_kind);
+        return 0;
+    }
+    parser.do_stage5();
     parser.output_to(supdef_cmdline.output_file, supdef_cmdline.output_kind);
     return 0;
 }

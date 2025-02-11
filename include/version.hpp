@@ -28,5 +28,5 @@
 #endif
 
 #ifndef SUPDEF_MAX_PARSING_PHASE
-    #define SUPDEF_MAX_PARSING_PHASE 4U
+    #define SUPDEF_MAX_PARSING_PHASE 5U
 #endif

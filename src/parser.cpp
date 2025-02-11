@@ -376,13 +376,16 @@ error:
     );
 
 end:
-    for (parser& p : m_imported_parsers)
+    for (const parser& p : m_imported_parsers)
     {
-        p.do_stage1();
-        p.do_stage2();
-        p.do_stage3();
-        p.do_stage4();
-        p.do_stage5();
+        // operator<=>(const parser& rhs) compares source file paths,
+        // so we can const_cast because none of the stages modify the
+        // source file path, and no ordering is violated
+        const_cast<parser&>(p).do_stage1();
+        const_cast<parser&>(p).do_stage2();
+        const_cast<parser&>(p).do_stage3();
+        const_cast<parser&>(p).do_stage4();
+        const_cast<parser&>(p).do_stage5();
     }
 }
 
@@ -423,7 +426,7 @@ std::optional<
         );
     
     if (tok->kind == token_kind::keyword && tok->keyword == keyword_kind::begin)
-        opts = registered_supdef::options::none;
+        opts = registered_supdef::options{ .eat_newlines = true };
     else
     {
         std::u32string optstring;
@@ -556,33 +559,62 @@ void ::supdef::parser::do_stage5()
     auto token = m_tokens.cbegin();
     while (token != m_tokens.cend())
     {
+        // skip empty lines
+        if (token->kind == token_kind::newline)
+        {
+            std::advance(token, 1);
+            continue;
+        }
+
+        registered_supdef sd;
+        auto move_line = [&sd, this](auto iter_start, auto iter_end) {
+            using line_type = decltype(std::declval<registered_supdef>().lines)::value_type;
+            line_type line;
+            std::copy(iter_start, iter_end, std::back_inserter(line));
+            sd.lines.push_back(std::move(line));
+            this->m_tokens.erase(iter_start, iter_end);
+        };
+
         auto line_start = token;
         auto line_end = std::find_if(
-            token, m_tokens.cend(),
+            line_start, m_tokens.cend(),
             [](const ::supdef::token& tok) {
                 return tok.kind == token_kind::newline;
             }
         );
+
+        // can't have a one-line supdef or runnable
+        // TODO: issue a warning if it matches the supdef or runnable start syntax
         if (line_end == m_tokens.cend())
-            break; // can't have a one-line supdef or runnable
+            break;
 
         auto supdef_start = parse_supdef_start(line_start, line_end, orig_data);
         if (supdef_start)
         {
-            registered_supdef sd;
             sd.opts = std::move(std::get<0>(*supdef_start));
             sd.name = std::move(std::get<1>(*supdef_start));
 
+            // keep the newline by taking the next as the real start
+            // of the supdef body, without erasing it
+            token = std::next(line_end);
+
             // remove line
             m_tokens.erase(line_start, line_end);
-            token = line_start;
 
             // append lines of tokens while not end of supdef
+            bool got_sd_end = false;
             do
             {
+                // again, skip empty lines
+                if (token->kind == token_kind::newline)
+                {
+                    std::advance(token, 1);
+                    continue;
+                }
+
                 line_start = token;
                 line_end = std::find_if(
-                    token, m_tokens.cend(),
+                    line_start, m_tokens.cend(),
                     [](const ::supdef::token& tok) {
                         return tok.kind == token_kind::newline;
                     }
@@ -595,22 +627,32 @@ void ::supdef::parser::do_stage5()
                 }
 
                 if (parse_supdef_runnable_end(line_start, line_end, orig_data))
+                {
+                    got_sd_end = true;
                     break;
+                }
 
-                std::vector<::supdef::token> line;
-                std::copy(line_start, line_end, std::back_inserter(line));
-                sd.lines.push_back(std::move(line));
-                m_tokens.erase(line_start, line_end);
-                token = line_start;
+                // go after the newline (i.e. the next line)
+                token = std::next(line_end);
+
+                // transfer line to supdef as a body line
+                move_line(line_start, line_end);
+
+                // this time, erase the newline
+                m_tokens.erase(line_end);
             } while (token != m_tokens.cend());
 
-            // remove end of supdef
-            if (!parse_supdef_runnable_end(token, m_tokens.cend(), orig_data))
+            if (!got_sd_end)
             {
                 errmsg = "missing @end keyword after supdef";
                 errtok = *std::prev(token);
                 goto error;
             }
+
+            // go to next line
+            token = std::next(line_end);
+
+            // remove @end of supdef
             m_tokens.erase(line_start, line_end);
 
             bool inserted;
@@ -620,7 +662,19 @@ void ::supdef::parser::do_stage5()
                     "supdef `" + format(sd.name) + "` already defined",
                     *line_start, orig_data, &format
                 );
+
+            continue;
         }
+
+        auto runnable_start = parse_runnable_start(line_start, line_end, orig_data);
+        if (runnable_start)
+        {
+            // TODO
+            continue;
+        }
+
+        // skip line
+        token = std::next(line_end);
     }
 
     return;
@@ -733,7 +787,9 @@ namespace
         return prefix + fmt_data(e.data) + suffix;
     };
     static constexpr void output_token_to(
-        std::ostream& os, const ::supdef::token& tok, ::supdef::parser::output_kind kind, size_t token_index = -1
+        std::ostream& os, const ::supdef::token& tok,
+        ::supdef::parser::output_kind kind,
+        size_t token_index = -1, std::string_view indent = ""
     )
     {
         switch (kind)
@@ -751,7 +807,7 @@ namespace
             case ::supdef::token_kind::octal_integer_literal:
                 [[__fallthrough__]];
             case ::supdef::token_kind::binary_integer_literal:
-                os << fmt_token(tok);
+                os << indent << fmt_token(tok);
                 break;
 
             // EOF
@@ -760,15 +816,15 @@ namespace
 
             // everything else
             default:
-                os << format(tok.data.value());
+                os << indent << format(tok.data.value());
                 break;
             }
             break;
         case ::supdef::parser::output_kind::tokens:
-            os << "<token n°" << token_index << ">\n"
-               << "  kind:    " << magic_enum::enum_name(tok.kind) << '\n'
-               << "  keyword: " << enum_name_as_string(tok) << '\n'
-               << "  data:    " << fmt_token(tok) << '\n';
+            os << indent << "<token n°" << token_index << ">\n"
+               << indent << "  kind:    " << magic_enum::enum_name(tok.kind) << '\n'
+               << indent << "  keyword: " << enum_name_as_string(tok) << '\n'
+               << indent << "  data:    " << fmt_token(tok) << '\n';
             break;
         case ::supdef::parser::output_kind::ast:
             // TODO: implement
@@ -808,6 +864,49 @@ void ::supdef::parser::output_to(std::ostream& os, output_kind kind)
         }
         else
             os << "  none\n";
+    }
+    if (kind & output_kind::supdefs)
+    {
+        size_t printed;
+        os << "supdefs:\n";
+        if (kind & recursive)
+        {
+            for (auto& p : m_imported_parsers)
+            {
+                printed = 0;
+                os << "  in file " << p.m_file.filename()->string() << '\n';
+                for (auto&& [name, supdef] : p.m_supdefs)
+                {
+                    os << "    " << format(name) << '\n';
+                    printed++;
+                    for (auto&& line : supdef.lines)
+                    {
+                        os << "      ";
+                        for (auto&& token : line)
+                            output_token_to(os, token, output_kind::text);
+                        os << '\n';
+                    }
+                }
+                if (!printed)
+                    os << "    none\n";
+            }
+        }
+        printed = 0;
+        os << "  in file " << m_file.filename()->string() << '\n';
+        for (auto&& [name, supdef] : m_supdefs)
+        {
+            os << "    " << format(name) << '\n';
+            printed++;
+            for (auto&& line : supdef.lines)
+            {
+                os << "      ";
+                for (auto&& token : line)
+                    output_token_to(os, token, output_kind::text);
+                os << '\n';
+            }
+        }
+        if (!printed)
+            os << "    none\n";
     }
     if (kind & output_kind::original)
         os << format(m_file.original_data());

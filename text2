@@ -1,8 +1,12 @@
 
 @import "text"
 
-@supdef testé
-    @let a = @len($1)
-    @let b = @len($2)
+@supdef begin test_macro
+    @set a = @len($1)
+    @set b = @len($2)
 #define SUM @math($a + $b)
 @end
+
+test_macro<nl=0>(blah, blah)
+-->
+#define SUM 8
