@@ -1,6 +1,7 @@
 #include <detail/globals.hpp>
 #include <init.hpp>
 #include <types.hpp>
+#include <parser.hpp>
 
 static constexpr uint64_t seed_with_time()
 {
@@ -12,9 +13,10 @@ static constexpr uint64_t seed_with_time()
 }
 
 
-GLOBAL_XXHASHER_DEF(std::u32string, 64, u32string)
-GLOBAL_XXHASHER_DEF(std::u16string, 64, u16string)
-GLOBAL_XXHASHER_DEF(std::u8string, 64, u8string)
-GLOBAL_XXHASHER_DEF(std::string, 64, string)
-GLOBAL_XXHASHER_DEF(std::wstring, 64, wstring)
-GLOBAL_XXHASHER_DEF(stdfs::path, 64, path)
+GLOBAL_XXHASHER_DEF(std::u32string, 64, u32string);
+GLOBAL_XXHASHER_DEF(std::u16string, 64, u16string);
+GLOBAL_XXHASHER_DEF(std::u8string, 64, u8string);
+GLOBAL_XXHASHER_DEF(std::string, 64, string);
+GLOBAL_XXHASHER_DEF(std::wstring, 64, wstring);
+GLOBAL_XXHASHER_DEF(stdfs::path, 64, path);
+GLOBAL_XXHASHER_DEF(supdef::parser::registered_runnable::lang::identifier, 64, runnable_language_identifier_enum);

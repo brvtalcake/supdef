@@ -89,7 +89,7 @@ if [ -z "$OPTIMIZE" ] || [ "$OPTIMIZE" -eq 0 ]; then
 else
     define CFLAGS "$(expand_libs cflags) -fdiagnostics-color=always -pipe -std=gnu++23 -Wall -Wextra -O3 -march=native -mtune=native -flto"
 fi
-define LDFLAGS "$(expand_libs libs) -L/usr/local/lib -lgrapheme -lboost_filesystem"
+define LDFLAGS "$(expand_libs libs) -L/usr/local/lib -lgrapheme -lboost_filesystem -lboost_unit_test_framework"
 
 cmd rm -rf obj
 

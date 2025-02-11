@@ -69,7 +69,7 @@ namespace supdef
         supdef, runnable,
         begin, end,
 
-        set, unset,
+        set, unset, pragma, global,
         
         if_, elseif, else_, endif,
         for_, endfor,

@@ -10,3 +10,8 @@
 test_macro<nl=0>(blah, blah)
 -->
 #define SUM 8
+
+@pragma nl=0
+test_macro(blah, " blah")
+-->
+#define SUM 9

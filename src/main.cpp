@@ -63,7 +63,7 @@ static ::cmdline supdef_cmdline{
     .verbosity = 0
 };
 
-static consteval std::string consteval_stringize(unsigned i)
+static constexpr inline std::string consteval_stringize(unsigned i)
 {
     switch (i)
     {
@@ -80,7 +80,7 @@ static consteval std::string consteval_stringize(unsigned i)
     }
 }
 
-static consteval std::string generate_stage_numbers_string()
+static inline constexpr std::string generate_stage_numbers_string()
 {
     std::string ret;
     for (unsigned i = 1; i < SUPDEF_MAX_PARSING_PHASE; ++i)
@@ -92,8 +92,6 @@ static consteval std::string generate_stage_numbers_string()
     ret += " or " + consteval_stringize(SUPDEF_MAX_PARSING_PHASE);
     return ret;
 }
-
-constexpr std::string SUPDEF_STAGE_NUMBERS = generate_stage_numbers_string();
 
 static void parse_cmdline(int argc, char const* const* argv)
 {
@@ -247,7 +245,7 @@ static void parse_cmdline(int argc, char const* const* argv)
             using namespace std::string_literals;
             supdef::printer::fatal(
                 "invalid stage number: "s + std::to_string(supdef_cmdline.stop_after_stage) +
-                " (must be "+ SUPDEF_STAGE_NUMBERS + ")"
+                " (must be "+ generate_stage_numbers_string() + ")"
             );
             ::exit(EXIT_FAILURE);
         }
@@ -390,6 +388,12 @@ static int real_main(int argc, char const* argv[])
         return 0;
     }
     parser.do_stage5();
+    if (supdef_cmdline.stop_after_stage == 5U)
+    {
+        parser.output_to(supdef_cmdline.output_file, supdef_cmdline.output_kind);
+        return 0;
+    }
+    parser.do_stage6();
     parser.output_to(supdef_cmdline.output_file, supdef_cmdline.output_kind);
     return 0;
 }

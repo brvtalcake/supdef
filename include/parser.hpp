@@ -2,6 +2,7 @@
 #define PARSER_HPP
 
 #include <types.hpp>
+#include <stack.hpp>
 #include <interpreter.hpp>
 #include <file.hpp>
 #include <unicode.hpp>
@@ -230,35 +231,39 @@ namespace supdef
             : private registered_base
         {
             TODO(make it possible to use e.g. "@pragma compiler_path C <path>");
-            TODO(change {compiler,interpreter}_opts to {compiler,interpreter}_cmdline);
             struct lang
             {
                 struct cmdline_source_placeholder { };
                 struct cmdline_executable_placeholder { };
                 struct cmdline_compiler_placeholder { };
                 struct cmdline_interpreter_placeholder { };
+                struct cmdline_version_placeholder { };
+                struct cmdline_joinargs_placeholder { };
             
-            private:
                 using cmdline_args_type = std::variant<
                     cmdline_source_placeholder,
                     cmdline_executable_placeholder,
                     cmdline_compiler_placeholder,
                     cmdline_interpreter_placeholder,
+                    cmdline_version_placeholder,
+                    cmdline_joinargs_placeholder,
                     std::u32string
                 >;
 
-            public:
-                // the standard / version used / needed
-                std::u32string version;
+                struct execinfo
+                {
+                    // the standard / version used / needed
+                    std::u32string version;
 
-                // the compiler and interpreter used, if needed
-                std::optional<stdfs::path> compiler, interpreter;
+                    // the compiler and interpreter used, if needed
+                    std::optional<stdfs::path> compiler, interpreter;
 
-                // the options if needed
-                std::vector<cmdline_args_type> compiler_cmdline, execution_cmdline;
+                    // the options if needed
+                    std::vector<cmdline_args_type> compiler_cmdline, execution_cmdline;
+                } exinfo;
 
                 // the language used
-                enum
+                enum identifier
                 {
                     c, cpp, rust, d, zig,
                     csharp, fsharp,
@@ -294,8 +299,20 @@ namespace supdef
             std::u32string name;
             std::vector<std::vector<::supdef::token>> lines;
         };
+
+        struct subsitution_context
+        {
+            umap<std::u32string, std::list<token>> variables;
+            /* umultimap<registered_runnable::lang::identifier, std::u32string> lang_aliases; */
+            umap<registered_runnable::lang::identifier, registered_runnable::lang::execinfo> default_langinfo;
+            std::optional<registered_supdef::options> default_sdopts;
+            std::optional<registered_runnable::options> default_runopts;
+            umap<std::u32string, registered_supdef>* supdefs;
+            umap<std::u32string, registered_runnable>* runnables;
+            bool toplevel;
+        };
     
-    private:
+    protected:
         static std::optional<std::pair<registered_supdef::options, std::u32string>>
         parse_supdef_start(
             std::list<token>::const_iterator line_start,
@@ -319,6 +336,8 @@ namespace supdef
             const std::u32string& origdata
         );
 
+        std::optional<registered_supdef> get_supdef(const std::u32string& name, bool recurse = true) const noexcept;
+
     public:
 
         parser(const stdfs::path& filename);
@@ -337,6 +356,7 @@ namespace supdef
         void do_stage5();
         // substitute supdefs, runnables or builtin functions (e.g. @math, @len, ...) calls
         // substitute @set variables
+        // parse @pragma's
         void do_stage6();
         // process @embed and @dump calls
         void do_stage7();
@@ -365,8 +385,6 @@ namespace supdef
         void output_to(std::ostream& os, output_kind kind = text);
         void output_to(const std::filesystem::path& filename, output_kind kind = text);
 
-        std::optional<registered_supdef> get_supdef(const std::u32string& name, bool recurse = true) const noexcept;
-
         parser_compare::ret_type operator<=>(const parser& rhs) const
         {
             auto thispath = *m_file.filename();
@@ -378,10 +396,12 @@ namespace supdef
     private:
         using supdef_map_type   = umap<std::u32string, registered_supdef>;
         using runnable_map_type = umap<std::u32string, registered_runnable>;
+        stack<subsitution_context> m_ctx;
         source_file m_file;
         std::list<token> m_tokens;
         std::set<parser> m_imported_parsers;
         supdef_map_type m_supdefs;
+        runnable_map_type m_runnables;
     };
 }
 

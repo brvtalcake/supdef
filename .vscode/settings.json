@@ -126,7 +126,8 @@
         "version": "cpp",
         "__config_site": "c",
         "strstream": "cpp",
-        "rb_tree": "cpp"
+        "rb_tree": "cpp",
+        "*.inc": "cpp"
     },
     "mesonbuild.configureOnOpen": false,
     "C_Cpp.default.cppStandard": "gnu++23",

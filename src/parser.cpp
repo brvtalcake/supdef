@@ -7,6 +7,8 @@
 #include <bits/stdc++.h>
 
 #include <boost/filesystem.hpp>
+#include <boost/process.hpp>
+#include <boost/test/debug.hpp>
 
 #include <magic_enum.hpp>
 
@@ -27,15 +29,26 @@ GLOBAL_XXHASHER_DECL(std::u8string, 64, u8string);
 GLOBAL_XXHASHER_DECL(std::string, 64, string);
 GLOBAL_XXHASHER_DECL(std::wstring, 64, wstring);
 GLOBAL_XXHASHER_DECL(stdfs::path, 64, path);
+GLOBAL_XXHASHER_DECL(supdef::parser::registered_runnable::lang::identifier, 64, runnable_language_identifier_enum);
 
 supdef::parser::parser(const stdfs::path& filename)
-    : m_file(stdfs::canonical(filename)), m_tokens(), m_imported_parsers(), m_supdefs(32, ::supdef::globals::get_xxhasher<supdef_map_type::key_type, 64UL>())
+    : m_ctx()
+    , m_file(stdfs::canonical(filename))
+    , m_tokens()
+    , m_imported_parsers()
+    , m_supdefs(32, ::supdef::globals::get_xxhasher<supdef_map_type::key_type, 64UL>())
+    , m_runnables(32, ::supdef::globals::get_xxhasher<runnable_map_type::key_type, 64UL>())
 {
     ::supdef::globals::get_already_processed_files().push_back(m_file.filename());
 }
 
 supdef::parser::parser(stdfs::path&& filename)
-    : m_file(stdfs::canonical(std::move(filename))), m_tokens(), m_imported_parsers(), m_supdefs(32, ::supdef::globals::get_xxhasher<supdef_map_type::key_type, 64UL>())
+    : m_ctx()
+    , m_file(stdfs::canonical(std::move(filename)))
+    , m_tokens()
+    , m_imported_parsers()
+    , m_supdefs(32, ::supdef::globals::get_xxhasher<supdef_map_type::key_type, 64UL>())
+    , m_runnables(32, ::supdef::globals::get_xxhasher<runnable_map_type::key_type, 64UL>())
 {
     ::supdef::globals::get_already_processed_files().push_back(m_file.filename());
 }
@@ -692,6 +705,348 @@ fatal:
     ::exit(EXIT_FAILURE);
 }
 
+using __pair_t = std::pair<
+    const ::supdef::parser::registered_runnable::lang::identifier,
+    ::supdef::parser::registered_runnable::lang::execinfo
+>;
+#undef  __ID
+#undef  __INFO
+#define __ID(x) ::supdef::parser::registered_runnable::lang::identifier::x
+#define __INFO(...) ::supdef::parser::registered_runnable::lang::execinfo{__VA_ARGS__}
+
+#undef  __SRC
+#undef  __EXE
+#undef  __COMP
+#undef  __INTERP
+#undef  __VERS
+#undef  __JOIN
+#define __SRC ::supdef::parser::registered_runnable::lang::cmdline_source_placeholder {}
+#define __EXE ::supdef::parser::registered_runnable::lang::cmdline_executable_placeholder {}
+#define __COMP ::supdef::parser::registered_runnable::lang::cmdline_compiler_placeholder {}
+#define __INTERP ::supdef::parser::registered_runnable::lang::cmdline_interpreter_placeholder {}
+#define __VERS ::supdef::parser::registered_runnable::lang::cmdline_version_placeholder {}
+#define __JOIN(a, b) a, ::supdef::parser::registered_runnable::lang::cmdline_joinargs_placeholder {}, b
+
+namespace
+{
+    static std::optional<stdfs::path> __which(const std::string& cmd)
+    {
+        namespace bp = boost::process;
+        auto found = bp::search_path(cmd);
+        if (found.empty())
+            return std::nullopt;
+        return found.c_str();
+    }
+
+
+    static const ::supdef::umap<
+        ::supdef::parser::registered_runnable::lang::identifier,
+        ::supdef::parser::registered_runnable::lang::execinfo
+    > DEFAULT_LANG_INFO(void)
+    {
+        return ::supdef::umap<
+            ::supdef::parser::registered_runnable::lang::identifier,
+            ::supdef::parser::registered_runnable::lang::execinfo
+        >{
+            {
+                __pair_t{
+                    __ID(c), __INFO(
+                        .version = U"gnu23",
+                        .compiler = __which("gcc"),
+                        .interpreter = std::nullopt,
+                        .compiler_cmdline = {
+                            __COMP, U"-xc", __JOIN(U"-std=", __VERS), U"-Wall", U"-Wextra", __SRC, U"-o", __EXE
+                        },
+                        .execution_cmdline = {
+                            __EXE
+                        }
+                    )
+                },
+                __pair_t{
+                    __ID(cpp), __INFO(
+                        .version = U"gnu++23",
+                        .compiler = __which("g++"),
+                        .interpreter = std::nullopt,
+                        .compiler_cmdline = {
+                            __COMP, U"-xc++", __JOIN(U"-std=", __VERS), U"-Wall", U"-Wextra", __SRC, U"-o", __EXE
+                        },
+                        .execution_cmdline = {
+                            __EXE
+                        }
+                    )
+                },
+                __pair_t{
+                    __ID(rust), __INFO(
+                        .version = U"2021",
+                        .compiler = __which("rustc"),
+                        .interpreter = std::nullopt,
+                        .compiler_cmdline = {
+                            __COMP, __JOIN(U"--edition=", __VERS), __SRC, U"-o", __EXE
+                        },
+                        .execution_cmdline = {
+                            __EXE
+                        }
+                    )
+                },
+                __pair_t{
+                    __ID(d), __INFO(
+                        .version = U"",
+                        .compiler = __which("dmd"),
+                        .interpreter = std::nullopt,
+                        .compiler_cmdline = {
+                            __COMP, __SRC, U"-of", __EXE
+                        },
+                        .execution_cmdline = {
+                            __EXE
+                        }
+                    )
+                },
+                __pair_t{
+                    __ID(zig), __INFO(
+                        .version = U"",
+                        .compiler = __which("zig"),
+                        .interpreter = std::nullopt,
+                        .compiler_cmdline = {
+                            __COMP, __SRC, U"-o", __EXE
+                        },
+                        .execution_cmdline = {
+                            __EXE
+                        }
+                    )
+                },
+            #if 0 // ignore c# and f# for now
+                __pair_t{
+                    __ID(csharp), __INFO(
+                        .version = U"",
+                        .compiler = __which("csc"),
+                        .interpreter = __which("mono"),
+                        .compiler_cmdline = {
+                            __COMP, __SRC, U"-out:" __EXE
+                        },
+                        .execution_cmdline = {
+                            __EXE
+                        }
+                    )
+                },
+                __pair_t{
+                    __ID(fsharp), __INFO(
+                        .version = U"",
+                        .compiler = __which("fsc"),
+                        .interpreter = __which("mono"),
+                        .compiler_cmdline = {
+                            __COMP, __SRC, U"-o", __EXE
+                        },
+                        .execution_cmdline = {
+                            __EXE
+                        }
+                    )
+                },
+            #endif
+                __pair_t{
+                    __ID(java), __INFO(
+                        .version = U"",
+                        .compiler = __which("javac"),
+                        .interpreter = __which("java"),
+                        .compiler_cmdline = {
+                            __COMP, __SRC
+                        },
+                        .execution_cmdline = {
+                            __INTERP, __EXE
+                        }
+                    )
+                },
+                __pair_t{
+                    __ID(ocaml), __INFO(
+                        .version = U"",
+                        .compiler = __which("ocamlc"),
+                        .interpreter = __which("ocaml"),
+                        .compiler_cmdline = {
+                            __COMP, __SRC, U"-o", __EXE
+                        },
+                        .execution_cmdline = {
+                            __EXE
+                        }
+                    )
+                },
+                __pair_t{
+                    __ID(racket), __INFO(
+                        .version = U"",
+                        .compiler = std::nullopt,
+                        .interpreter = __which("racket"),
+                        .compiler_cmdline = { },
+                        .execution_cmdline = {
+                            __INTERP, __SRC
+                        }
+                    )
+                },
+                __pair_t{
+                    __ID(haskell), __INFO(
+                        .version = U"",
+                        .compiler = __which("ghc"),
+                        .interpreter = std::nullopt,
+                        .compiler_cmdline = {
+                            __COMP, __SRC, U"-o", __EXE
+                        },
+                        .execution_cmdline = {
+                            __EXE
+                        }
+                    )
+                },
+                __pair_t{
+                    __ID(python), __INFO(
+                        .version = U"3.12",
+                        .compiler = std::nullopt,
+                        .interpreter = __which("python"),
+                        .compiler_cmdline = { },
+                        .execution_cmdline = {
+                            __JOIN(__INTERP, __VERS), __SRC
+                        }
+                    )
+                },
+                __pair_t{
+                    __ID(shell), __INFO(
+                        .version = U"",
+                        .compiler = std::nullopt,
+                        .interpreter = __which("sh"),
+                        .compiler_cmdline = { },
+                        .execution_cmdline = {
+                            __INTERP, __SRC
+                        }
+                    )
+                },
+                __pair_t{
+                    __ID(perl), __INFO(
+                        .version = U"",
+                        .compiler = std::nullopt,
+                        .interpreter = __which("perl"),
+                        .compiler_cmdline = { },
+                        .execution_cmdline = {
+                            __INTERP, __SRC
+                        }
+                    )
+                },
+                __pair_t{
+                    __ID(ruby), __INFO(
+                        .version = U"",
+                        .compiler = std::nullopt,
+                        .interpreter = __which("ruby"),
+                        .compiler_cmdline = { },
+                        .execution_cmdline = {
+                            __INTERP, __SRC
+                        }
+                    )
+                }
+            },
+            0, ::supdef::globals::get_xxhasher<::supdef::parser::registered_runnable::lang::identifier, 64UL>()
+        };
+    }
+}
+
+#undef  __ID
+#undef  __INFO
+#undef  __SRC
+#undef  __EXE
+#undef  __COMP
+#undef  __INTERP
+#undef  __VERS
+#undef  __JOIN
+
+void ::supdef::parser::do_stage6()
+{
+    namespace bd = ::boost::debug;
+    if (bd::under_debugger())
+        bd::debugger_break();
+    m_ctx.make_empty();
+    m_ctx.push(
+        ::supdef::parser::subsitution_context{
+            .variables = {},
+            .default_langinfo = DEFAULT_LANG_INFO(),
+            .default_sdopts = std::nullopt,
+            .default_runopts = std::nullopt,
+            .supdefs = &m_supdefs,
+            .runnables = &m_runnables,
+            .toplevel = true
+        }
+    );
+
+    auto tok = m_tokens.cbegin();
+    while (tok != m_tokens.cend())
+    {
+        /*
+         * we have 4 things to look for:
+         * 1) supdef/runnable calls :
+         *     <macro-name> ( '<' <option-list> '>' )? '(' <arg-list> ')'
+         * 2) builtin function calls :
+         *     '@' <function-name> '(' <arg-list> ')'
+         * 3) variable assignments :
+         *     '@' 'set' <variable-name> '=' <value>
+         * 4) pragmas :
+         *     '@' 'pragma' <pragma-name> <pragma-args>
+         * 
+         * actions to take:
+         * 1) supdef/runnable calls :
+         *    - add a substitution context to the stack
+         *    - call the supdef/runnable replacer with the substitution context,
+         *        and the arguments (potentially substituting macros in the arguments, first)
+         * 2) builtin function calls :
+         *    - same as above but with the builtin function replacer
+         * 3) variable assignments :
+         *    - update the variable in the substitution context
+         * 4) pragmas :
+         *    - update substitution context accordingly
+         */
+
+        switch (tok->kind)
+        {
+        case token_kind::at: {
+        } break;
+        case token_kind::identifier: {
+        } break;
+        case token_kind::dollar: {
+            std::advance(tok, 1);
+            if (tok == m_tokens.cend())
+                break;
+            if (tok->kind == token_kind::dollar)
+            {
+                // escape sequence
+                m_tokens.erase(tok);
+                break;
+            }
+            if (tok->kind == token_kind::identifier)
+            {
+                std::list<token> subst;
+                auto&& [traversed, gotit] = m_ctx.traverse_until(
+                    [&subst, this, &tok](const ::supdef::parser::subsitution_context& ctx) noexcept -> bool {
+                        auto var = ctx.variables.find(tok->data.value());
+                        if (var != ctx.variables.end())
+                        {
+                            subst = var->second;
+                            return true;
+                        }
+                        return false;
+                    }
+                );
+                if (!gotit)
+                {
+                    printer::warning(
+                        "undefined variable `" + format(tok->data.value()) + "`",
+                        *tok, m_file.original_data(), &format
+                    );
+                    break;
+                }
+                std::advance(tok, -1);
+                m_tokens.erase(std::next(tok));
+            }
+        } break;
+        default:
+            break;
+        }
+
+        std::advance(token, 1);
+    }
+}
+
+
 [[__nodiscard__]]
 bool ::supdef::parser::add_child_parser(const stdfs::path& filename, ::supdef::token_kind pathtype) noexcept
 {
@@ -917,3 +1272,5 @@ void ::supdef::parser::output_to(const stdfs::path& filename, output_kind kind)
     std::ofstream ofs(filename);
     this->output_to(ofs, kind);
 }
+
+/* #include <boost/test/impl/debug.ipp> */

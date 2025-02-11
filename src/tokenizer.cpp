@@ -421,7 +421,7 @@ namespace
     supdef, runnable,               \
     begin, end,                     \
                                     \
-    set, unset,                     \
+    set, unset, pragma, global,     \
                                     \
     if_, elseif, else_, endif,      \
     for_, endfor,                   \
@@ -443,6 +443,8 @@ namespace
     end sep()           \
     set sep()           \
     unset sep()         \
+    pragma sep()        \
+    global sep()        \
     if sep()            \
     elseif sep()        \
     else sep()          \
