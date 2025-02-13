@@ -4,16 +4,6 @@
 #include <tokenizer.hpp>
 #include <detail/globals.hpp>
 
-#include <bits/stdc++.h>
-
-#include <boost/filesystem.hpp>
-#include <boost/process.hpp>
-#include <boost/test/debug.hpp>
-
-#include <magic_enum.hpp>
-
-#include <simdutf.h>
-
 GLOBAL_GETTER_DECL(
     std::vector<std::shared_ptr<const stdfs::path>>,
     already_processed_files
@@ -126,14 +116,14 @@ void ::supdef::parser::do_stage2()
                 );
             }
         }
-        std::advance(token, 1);
+        stdranges::advance(token, 1);
     }
 }
 
 // remove comments
 void ::supdef::parser::do_stage3()
 {
-    for (auto token = m_tokens.begin(); token != m_tokens.end(); std::advance(token, 1))
+    for (auto token = m_tokens.begin(); token != m_tokens.end(); stdranges::advance(token, 1))
     {
         switch (token->kind)
         {
@@ -185,14 +175,44 @@ namespace
         auto cpy = iter;
         if (cpy == begin)
             return true;
-        std::advance(cpy, -1);
+        stdranges::advance(cpy, -1);
         while (cpy != begin && cpy->kind != ::supdef::token_kind::newline)
         {
             if (cpy->kind != ::supdef::token_kind::horizontal_whitespace)
                 return false;
-            std::advance(cpy, -1);
+            stdranges::advance(cpy, -1);
         }
         return true;
+    }
+
+    static auto reverse_find(
+        const std::bidirectional_iterator auto begin, const std::bidirectional_iterator auto end,
+        auto&& value
+    )
+    {
+        auto iter = end;
+        while (iter != begin)
+        {
+            stdranges::advance(iter, -1);
+            if (*iter == value)
+                return iter;
+        }
+        return iter;
+    }
+
+    static auto reverse_find_if(
+        const std::bidirectional_iterator auto begin, const std::bidirectional_iterator auto end,
+        auto&& pred
+    )
+    {
+        auto iter = end;
+        while (iter != begin)
+        {
+            stdranges::advance(iter, -1);
+            if (pred(*iter))
+                return iter;
+        }
+        return iter;
     }
 
     static auto replace_from_to(
@@ -238,26 +258,6 @@ namespace
         destcont.splice(destlast, std::move(srcrange));
     }
 
-    static bool strmatch(
-        const std::u32string& str, const std::u32string& pattern,
-        bool case_sensitive = true
-    )
-    {
-        if (str.size() != pattern.size())
-            return false;
-        if (case_sensitive)
-            return str == pattern;
-        icu::UnicodeString ustr = icu::UnicodeString::fromUTF32(
-            reinterpret_cast<const UChar32*>(str.data()),
-            str.size()
-        );
-        icu::UnicodeString upattern = icu::UnicodeString::fromUTF32(
-            reinterpret_cast<const UChar32*>(pattern.data()),
-            pattern.size()
-        );
-        return ustr.caseCompare(upattern, U_FOLD_CASE_DEFAULT) == 0;
-    }
-
     static size_t skipws(points_to_token_and_input auto& iter, const points_to_token_and_input auto end, bool skip_newlines = false)
     {
         size_t count = 0;
@@ -265,7 +265,7 @@ namespace
                 (iter->kind == ::supdef::token_kind::horizontal_whitespace ||
                     (skip_newlines && iter->kind == ::supdef::token_kind::newline)))
         {
-            std::advance(iter, 1);
+            stdranges::advance(iter, 1);
             count++;
         }
         return count;
@@ -280,7 +280,7 @@ namespace
         {
             while (iter != end && !pred(iter))
             {
-                std::advance(iter, 1);
+                stdranges::advance(iter, 1);
                 count++;
             }
         }
@@ -288,7 +288,7 @@ namespace
         {
             while (iter != end && !pred(*iter))
             {
-                std::advance(iter, 1);
+                stdranges::advance(iter, 1);
                 count++;
             }
         }
@@ -318,7 +318,7 @@ namespace
                     std::invoke(fncpy, iter);
                 else
                     std::invoke(fncpy, *iter);
-                std::advance(iter, 1);
+                stdranges::advance(iter, 1);
                 count++;
             }
         }
@@ -330,7 +330,7 @@ namespace
                     std::invoke(fncpy, iter);
                 else
                     std::invoke(fncpy, *iter);
-                std::advance(iter, 1);
+                stdranges::advance(iter, 1);
                 count++;
             }
         }
@@ -354,7 +354,7 @@ void ::supdef::parser::do_stage4()
     ::supdef::token errtok;
     const auto& orig_data = m_file.original_data();
 
-    for (auto token = m_tokens.cbegin(); token != m_tokens.cend(); std::advance(token, 1))
+    for (auto token = m_tokens.cbegin(); token != m_tokens.cend(); stdranges::advance(token, 1))
     {
         if (token->kind != token_kind::at)
             continue;
@@ -364,14 +364,14 @@ void ::supdef::parser::do_stage4()
         const auto import_start = token;
         std::remove_const_t<decltype(import_start)> import_end;
 
-        std::advance(token, 1);
+        stdranges::advance(token, 1);
         skipws(token, m_tokens.cend());
         if (token->kind != token_kind::keyword)
             continue;
         if (token->keyword != keyword_kind::import)
             continue;
 
-        std::advance(token, 1);
+        stdranges::advance(token, 1);
         if (skipws(token, m_tokens.cend()) == 0)
             printer::warning(
                 "missing whitespace after import keyword",
@@ -397,7 +397,7 @@ void ::supdef::parser::do_stage4()
             const auto langle = token;
             std::u32string tmppath;
             
-            std::advance(token, 1);
+            stdranges::advance(token, 1);
             skip_until(
                 token, m_tokens.cend(), token_kind::rangle,
                 [&tmppath](const ::supdef::token& tok) {
@@ -486,12 +486,12 @@ std::optional<
     if (tok == line_end || tok->kind != token_kind::at)
         return std::nullopt;
 
-    std::advance(tok, 1);
+    stdranges::advance(tok, 1);
     skipws(tok, line_end);
     if (tok == line_end || tok->kind != token_kind::keyword || tok->keyword != keyword_kind::supdef)
         return std::nullopt;
 
-    std::advance(tok, 1);
+    stdranges::advance(tok, 1);
     skipped = skipws(tok, line_end);
     if (tok == line_end)
         return std::nullopt;
@@ -531,7 +531,7 @@ std::optional<
         opts = registered_supdef::parse_options(optstring);
     }
 
-    std::advance(tok, 1);
+    stdranges::advance(tok, 1);
     skipped = skipws(tok, line_end);
     if (tok == line_end)
     {
@@ -556,7 +556,7 @@ std::optional<
     }
     name = std::move(tok->data.value());
 
-    std::advance(tok, 1);
+    stdranges::advance(tok, 1);
     skipws(tok, line_end);
     if (tok != line_end)
     {
@@ -597,12 +597,12 @@ bool ::supdef::parser::parse_supdef_runnable_end(
     if (tok == line_end || tok->kind != token_kind::at)
         return false;
     
-    std::advance(tok, 1);
+    stdranges::advance(tok, 1);
     skipws(tok, line_end);
     if (tok == line_end || tok->kind != token_kind::keyword || tok->keyword != keyword_kind::end)
         return false;
 
-    std::advance(tok, 1);
+    stdranges::advance(tok, 1);
     skipws(tok, line_end);
     if (tok != line_end)
         printer::warning(
@@ -638,7 +638,7 @@ void ::supdef::parser::do_stage5()
         // skip empty lines
         if (token->kind == token_kind::newline)
         {
-            std::advance(token, 1);
+            stdranges::advance(token, 1);
             continue;
         }
 
@@ -684,7 +684,7 @@ void ::supdef::parser::do_stage5()
                 // again, skip empty lines
                 if (token->kind == token_kind::newline)
                 {
-                    std::advance(token, 1);
+                    stdranges::advance(token, 1);
                     continue;
                 }
 
@@ -1088,131 +1088,34 @@ void ::supdef::parser::execute_toplevel()
             break;
         }
 
-        std::advance(token, 1);
+        stdranges::advance(token, 1);
     }
 }
 
 namespace
 {
-    struct ascii_to_char32_view
-        : public stdranges::view_interface<ascii_to_char32_view>
+    std::list<::supdef::token> isolate_line(
+        std::list<::supdef::token>& tokens,
+        std::list<::supdef::token>::iterator& pos
+    ) noexcept
     {
-        struct iterator
-        {
-            using iterator_concept = std::u32string::iterator::iterator_concept;
-            using iterator_category = std::iterator_traits<std::u32string::iterator>::iterator_category;
-            using value_type = std::iterator_traits<std::u32string::iterator>::value_type;
-            using difference_type = std::iterator_traits<std::u32string::iterator>::difference_type;
-            using pointer = std::iterator_traits<std::u32string::iterator>::pointer;
-            using reference = std::iterator_traits<std::u32string::iterator>::reference;
-
-            constexpr iterator() noexcept = default;
-            constexpr iterator(const iterator&) noexcept = default;
-            constexpr iterator(iterator&&) noexcept = default;
-            constexpr iterator& operator=(const iterator&) noexcept = default;
-            constexpr iterator& operator=(iterator&&) noexcept = default;
-
-            constexpr iterator(std::string::iterator iter) noexcept
-                : m_iter{ std::move(iter) }
-            {
+        std::list<::supdef::token> line;
+        auto line_start = reverse_find_if(
+            pos, tokens.begin(),
+            [](const ::supdef::token& tok) {
+                return tok.kind == ::supdef::token_kind::newline;
             }
-
-            constexpr iterator& operator++() noexcept
-            {
-                std::advance(m_iter, 1);
-                return *this;
+        );
+        auto line_end = stdranges::find_if(
+            pos, tokens.end(),
+            [](const ::supdef::token& tok) {
+                return tok.kind == ::supdef::token_kind::newline;
             }
-
-            constexpr iterator operator++(int) noexcept
-            {
-                auto cpy = *this;
-                std::advance(m_iter, 1);
-                return cpy;
-            }
-
-            constexpr iterator& operator+=(difference_type n) noexcept
-            {
-                std::advance(m_iter, n);
-                return *this;
-            }
-
-            constexpr iterator operator+(difference_type n) noexcept
-            {
-                auto cpy = *this;
-                std::advance(m_iter, n);
-                return cpy;
-            }
-
-            constexpr iterator& operator--() noexcept
-            {
-                std::advance(m_iter, -1);
-                return *this;
-            }
-
-            constexpr iterator operator--(int) noexcept
-            {
-                auto cpy = *this;
-                std::advance(m_iter, -1);
-                return cpy;
-            }
-
-            constexpr iterator& operator-=(difference_type n) noexcept
-            {
-                std::advance(m_iter, -n);
-                return *this;
-            }
-
-            constexpr iterator operator-(difference_type n) noexcept
-            {
-                auto cpy = *this;
-                std::advance(m_iter, -n);
-                return cpy;
-            }
-
-            constexpr reference operator*() const noexcept
-            {
-                m_buf = static_cast<char32_t>(*m_iter);
-                return m_buf;
-            }
-
-            constexpr pointer operator->() const noexcept
-            {
-                return &m_buf;
-            }
-
-            constexpr auto operator<=>(const iterator& rhs) const noexcept
-            {
-                return m_iter <=> rhs.m_iter;
-            }
-        private:
-            std::string::iterator m_iter;
-            char32_t m_buf;
-        };
-        
-        constexpr ascii_to_char32_view(std::string& str) noexcept
-            : m_str{ std::addressof(str) }
-        {
-        }
-
-        constexpr ascii_to_char32_view(const ascii_to_char32_view&) noexcept = default;
-        constexpr ascii_to_char32_view(ascii_to_char32_view&&) noexcept = default;
-
-        constexpr ascii_to_char32_view& operator=(const ascii_to_char32_view&) noexcept = default;
-        constexpr ascii_to_char32_view& operator=(ascii_to_char32_view&&) noexcept = default;
-
-        constexpr iterator begin() const noexcept
-        {
-            return iterator{ m_str->begin() };
-        }
-
-        constexpr iterator end() const noexcept
-        {
-            return iterator{ m_str->end() };
-        }
-
-    private:
-        std::string* m_str;
-    };
+        );
+        line.splice(line.begin(), tokens, line_start, line_end);
+        pos = line_end;
+        return line;
+    }
 }
 
 std::list<::supdef::token>::iterator supdef::parser::execute_directive(
@@ -1225,7 +1128,7 @@ std::list<::supdef::token>::iterator supdef::parser::execute_directive(
         return m_tokens.begin();
     };
     auto ret = tokcpy;
-    std::advance(tok, 1);
+    stdranges::advance(tok, 1);
     skipws(tok, m_tokens.cend());
     if (tok == m_tokens.end())
         return m_tokens.end();
@@ -1253,7 +1156,9 @@ std::list<::supdef::token>::iterator supdef::parser::execute_directive(
             );
             return tok;
         }
-        tok = this->execute_pragma(tok, tokcpy);
+        std::list line = isolate_line(m_tokens, tok);
+        // NOTE: tok is correctly updated by isolate_line()
+        this->execute_pragma(line.begin(), line.end());
     } break;
     // these are handled in the next stage
     case keyword_kind::dump:
@@ -1263,70 +1168,8 @@ std::list<::supdef::token>::iterator supdef::parser::execute_directive(
     }
 }
 
-namespace
-{
-    template <size_t N>
-    struct bitset_inserter
-    {
-        using iterator_category = std::output_iterator_tag;
-        using iterator_concept = std::output_iterator_tag;
-        using value_type = void;
-        using difference_type = ptrdiff_t;
-        using pointer = void;
-        using reference = std::bitset<N>::reference;
-
-        constexpr bitset_inserter(std::bitset<N>& bs) noexcept
-            : m_bs{ std::addressof(bs) }
-            , m_idx{ 0 }
-        {
-        }
-
-        constexpr bitset_inserter(const bitset_inserter&) noexcept = default;
-        constexpr bitset_inserter(bitset_inserter&&) noexcept = default;
-
-        constexpr bitset_inserter& operator=(const bitset_inserter&) noexcept = default;
-        constexpr bitset_inserter& operator=(bitset_inserter&&) noexcept = default;
-
-#if 0
-        constexpr bitset_inserter& operator*() noexcept
-        {
-            return *this;
-        }
-
-        constexpr bitset_inserter& operator=(bool value) noexcept
-        {
-            (*m_bs)[m_idx] = value;
-            return *this;
-        }
-#else
-        constexpr reference operator*() noexcept
-        {
-            reference ref = (*m_bs)[m_idx];
-            return ref;
-        }
-#endif
-
-        constexpr bitset_inserter& operator++() noexcept
-        {
-            m_idx++;
-            return *this;
-        }
-
-        constexpr bitset_inserter operator++(int) noexcept
-        {
-            auto cpy = *this;
-            m_idx++;
-            return cpy;
-        }
-
-    private:
-        std::bitset<N>* m_bs;
-        size_t m_idx;
-    };
-}
-
-std::list<::supdef::token>::iterator supdef::parser::execute_pragma(
-    std::list<::supdef::token>::iterator tok, const std::list<::supdef::token>::iterator tokcpy
+void supdef::parser::execute_pragma(
+    const std::list<::supdef::token>::iterator start, const std::list<::supdef::token>::iterator end
 )
 {
     // @pragma supdef <pragma-name>
@@ -1347,40 +1190,35 @@ std::list<::supdef::token>::iterator supdef::parser::execute_pragma(
         
     };
 
-    auto rescanfromtok = [tokcpy, this] {
-        if (tokcpy != m_tokens.begin())
-            return std::prev(tokcpy);
-        return m_tokens.begin();
-    };
-    auto ret = tokcpy;
-    std::advance(tok, 1);
-    if (tok == m_tokens.end())
-        return m_tokens.end();
-    if (tok->kind != token_kind::identifier && tok->kind != token_kind::keyword)
+    auto iter = start;
+    stdranges::advance(iter, 1);
+    if (iter == end)
+        return;
+    if (iter->kind != token_kind::identifier && iter->kind != token_kind::keyword)
     {
         printer::warning(
             "expected identifier or keyword after @pragma",
-            *tok, m_file.original_data(), &format
+            *iter, m_file.original_data(), &format
         );
-        return tok;
+        return;
     }
 
-    std::u32string_view pragma_name = tok->data.value();
-    if (strmatch(pragma_name, U"supdef"))
+    std::u32string_view pragma_name = iter->data.value();
+    if (strmatch(pragma_name, U"supdef") && stdranges::size(supdef_pragma_list))
     {
-        std::advance(tok, 1);
-        skipws(tok, m_tokens.cend());
-        if (tok == m_tokens.end())
-            return m_tokens.end();
-        if (tok->kind != token_kind::identifier)
+        stdranges::advance(iter, 1);
+        skipws(iter, end);
+        if (iter == end)
+            return;
+        if (iter->kind != token_kind::identifier)
         {
             printer::warning(
                 "expected identifier after @pragma supdef",
-                *tok, m_file.original_data(), &format
+                *iter, m_file.original_data(), &format
             );
-            return tok;
+            return;
         }
-        pragma_name = tok->data.value();
+        pragma_name = iter->data.value();
         
         constexpr size_t possibilities = stdranges::distance(stdranges::begin(supdef_pragma_list), stdranges::end(supdef_pragma_list));
         std::bitset<possibilities> pragma_macthes;
@@ -1395,9 +1233,9 @@ std::list<::supdef::token>::iterator supdef::parser::execute_pragma(
         {
             printer::warning(
                 "unknown pragma `" + format(pragma_name) + "`",
-                *tok, m_file.original_data(), &format
+                *iter, m_file.original_data(), &format
             );
-            return tok;
+            return;
         }
         size_t longest     = 0,
                longest_idx = 0;
@@ -1412,24 +1250,24 @@ std::list<::supdef::token>::iterator supdef::parser::execute_pragma(
         switch (longest_idx)
         {
         case 0: { // newline
-            std::advance(tok, 1);
-            skipws(tok, m_tokens.cend());
-            if (tok == m_tokens.end())
+            stdranges::advance(iter, 1);
+            skipws(iter, end);
+            if (iter == end)
             {
                 printer::warning(
                     "expected value after @pragma supdef newline",
-                    *std::prev(tok), m_file.original_data(), &format
+                    *std::prev(iter), m_file.original_data(), &format
                 );
-                return m_tokens.end();
+                return;
             }
-            auto astribool = supdef::registered_base::parse_bool_val(tok->data.value());
+            auto astribool = supdef::registered_base::parse_bool_val(iter->data.value());
             if (boost::logic::indeterminate(astribool))
             {
                 printer::warning(
                     "expected boolean value after @pragma supdef newline",
-                    *tok, m_file.original_data(), &format
+                    *iter, m_file.original_data(), &format
                 );
-                return tok;
+                return;
             }
             auto& opts = m_ctx.top().default_sdopts;
             opts = opts.or_else(
@@ -1445,14 +1283,12 @@ std::list<::supdef::token>::iterator supdef::parser::execute_pragma(
             break;
         }
 
-        return tok;
+        return;
     }
     if (strmatch(pragma_name, U"runnable"))
     {
 
     }
-
-    return tok;
 }
 
 std::list<::supdef::token>::iterator supdef::parser::execute_variable_substitution(
@@ -1465,7 +1301,7 @@ std::list<::supdef::token>::iterator supdef::parser::execute_variable_substituti
         return m_tokens.begin();
     };
     auto ret = tokcpy;
-    std::advance(tok, 1);
+    stdranges::advance(tok, 1);
     if (tok == m_tokens.end())
         return m_tokens.end();
     if (tok->kind == token_kind::dollar)

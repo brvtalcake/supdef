@@ -9,24 +9,15 @@
 #include <tokenizer.hpp>
 #include <detail/xxhash.hpp>
 
-#include <filesystem>
-#include <vector>
-#include <list>
-#include <set>
-#include <utility>
-#include <generator>
-#include <string>
-#include <string_view>
-#include <optional>
-#include <memory>
-#include <iostream>
-#include <fstream>
-#include <algorithm>
-#include <functional>
-#include <stdexcept>
-#include <map>
-#include <variant>
-#include <regex>
+#include <bits/stdc++.h>
+
+#include <boost/filesystem.hpp>
+#include <boost/process.hpp>
+#include <boost/test/debug.hpp>
+
+#include <magic_enum.hpp>
+
+#include <simdutf.h>
 
 #include <unicode/ustream.h>
 #include <unicode/unistr.h>
@@ -268,14 +259,15 @@ namespace supdef
                 } exinfo;
 
                 // the language used
-                enum identifier
+                enum class identifier
                 {
-                    c, cpp, rust, d, zig,
+                    c = 1, cpp, rust, d, zig,
                     csharp, fsharp,
                     java,
                     ocaml, racket, haskell,
-                    python, shell, perl, ruby
+                    python, shell, perl, ruby,
                 } ident;
+                static constexpr size_t _langidentcount = identifier::ruby;
             };
 
             PACKED_STRUCT(options)
@@ -296,6 +288,7 @@ namespace supdef
                 unsigned mode : 2;
             };
 
+            static constexpr std::optional<lang> is_lang_identifier(std::u32string_view sv);
             static constexpr options parse_options(const std::u32string& str);
             static constexpr lang parse_lang(const std::u32string& str);
 
@@ -352,8 +345,9 @@ namespace supdef
         std::list<token>::iterator
         execute_directive(std::list<token>::iterator tok, const std::list<token>::iterator tokcpy);
 
-        std::list<token>::iterator
-        execute_pragma(std::list<token>::iterator tok, const std::list<token>::iterator tokcpy);
+        /* std::list<token>::iterator */
+        void
+        execute_pragma(const std::list<token>::iterator start, const std::list<token>::iterator end);
 
     public:
 
