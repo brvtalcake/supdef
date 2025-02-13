@@ -28,6 +28,27 @@ supdef::parser::registered_supdef::parse_options(const std::u32string& str)
     return static_cast<opts_type>(opts);
 }
 
+constexpr boost::logic::tribool supdef::registered_base::parse_bool_val(
+    std::u32string_view sv
+)
+{
+    using namespace std::string_view_literals;
+
+    if (
+        sv == U"0"sv ||
+        sv == U"false"sv || sv == U"no"sv || sv == U"off"sv ||
+        sv == U"FALSE"sv || sv == U"NO"sv || sv == U"OFF"sv
+    )
+        return false;
+    if (
+        sv == U"1"sv ||
+        sv == U"true"sv || sv == U"yes"sv || sv == U"on"sv ||
+        sv == U"TRUE"sv || sv == U"YES"sv || sv == U"ON"sv
+    )
+        return true;
+    return boost::logic::indeterminate;
+}
+
 constexpr boost::logic::tribool supdef::registered_base::parse_bool_opt(
     std::u32string_view sv, std::u32string_view opt)
 {
@@ -46,15 +67,5 @@ constexpr boost::logic::tribool supdef::registered_base::parse_bool_opt(
     if (sv.empty())
         return boost::logic::indeterminate;
 
-    if (
-        sv.front() == U'0' ||
-        sv.starts_with(U"false"sv) || sv.starts_with(U"no"sv) || sv.starts_with(U"off"sv) ||
-        sv.starts_with(U"FALSE"sv) || sv.starts_with(U"NO"sv) || sv.starts_with(U"OFF"sv))
-        return false;
-    if (
-        sv.front() == U'1' ||
-        sv.starts_with(U"true"sv) || sv.starts_with(U"yes"sv) || sv.starts_with(U"on"sv) ||
-        sv.starts_with(U"TRUE"sv) || sv.starts_with(U"YES"sv) || sv.starts_with(U"ON"sv))
-        return true;
-    return boost::logic::indeterminate;
+    return parse_bool_val(sv);
 }

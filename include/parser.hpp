@@ -167,6 +167,9 @@ namespace supdef
 
     struct registered_base
     {
+        static constexpr boost::logic::tribool parse_bool_val(
+            std::u32string_view sv
+        );
         static constexpr boost::logic::tribool parse_bool_opt(
             std::u32string_view sv, std::u32string_view opt
         );
@@ -219,6 +222,8 @@ namespace supdef
             {
                 unsigned eat_newlines : 1;
             };
+
+            static constexpr options none_options = options{ .eat_newlines = 0 };
 
             static constexpr options parse_options(const std::u32string& str);
 
@@ -309,7 +314,8 @@ namespace supdef
             std::optional<registered_runnable::options> default_runopts;
             umap<std::u32string, registered_supdef>* supdefs;
             umap<std::u32string, registered_runnable>* runnables;
-            bool toplevel;
+            std::vector<std::list<token>> arguments;
+            bool toplevel, in_supdef, in_runnable;
         };
     
     protected:
@@ -337,6 +343,17 @@ namespace supdef
         );
 
         std::optional<registered_supdef> get_supdef(const std::u32string& name, bool recurse = true) const noexcept;
+        
+        void execute_toplevel();
+        
+        std::list<token>::iterator
+        execute_variable_substitution(std::list<token>::iterator tok, const std::list<token>::iterator tokcpy);
+
+        std::list<token>::iterator
+        execute_directive(std::list<token>::iterator tok, const std::list<token>::iterator tokcpy);
+
+        std::list<token>::iterator
+        execute_pragma(std::list<token>::iterator tok, const std::list<token>::iterator tokcpy);
 
     public:
 

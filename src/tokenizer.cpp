@@ -171,6 +171,7 @@ namespace
             TOKEN_CASE('@', at);
             TOKEN_CASE('~', tilde);
             TOKEN_CASE('.', period);
+            TOKEN_CASE('#', hash);
             default:
                 return std::nullopt;
 #undef TOKEN_CASE

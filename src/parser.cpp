@@ -195,6 +195,69 @@ namespace
         return true;
     }
 
+    static auto replace_from_to(
+        auto& destcont, std::input_iterator auto destfirst, std::input_iterator auto destlast,
+        std::input_iterator auto srcfirst, std::input_iterator auto srclast
+    )
+    {
+        destcont.erase(destfirst, destlast);
+        return stdranges::copy(srcfirst, srclast, std::inserter(destcont, destlast));
+    }
+
+    static auto replace_from_to(
+        auto& destcont, std::input_iterator auto destfirst, std::input_iterator auto destlast,
+        stdranges::input_range auto&& srcrange
+    )
+    {
+        destcont.erase(destfirst, destlast);
+        return stdranges::copy(
+            std::forward<std::remove_reference_t<decltype(srcrange)>>(srcrange),
+            std::inserter(destcont, destlast)
+        );
+    }
+
+    static auto replace_from_to(
+        auto& destcont, std::input_iterator auto destfirst, std::input_iterator auto destlast,
+        auto&& srcelem
+    )
+    {
+        destcont.erase(destfirst, destlast);
+        return destcont.insert(
+            destlast,
+            std::forward<std::remove_reference_t<decltype(srcelem)>>(srcelem)
+        );
+    }
+
+    template <typename T>
+    static auto replace_from_to(
+        std::list<T>& destcont, std::input_iterator auto destfirst, std::input_iterator auto destlast,
+        std::list<T>&& srcrange
+    )
+    {
+        destcont.erase(destfirst, destlast);
+        destcont.splice(destlast, std::move(srcrange));
+    }
+
+    static bool strmatch(
+        const std::u32string& str, const std::u32string& pattern,
+        bool case_sensitive = true
+    )
+    {
+        if (str.size() != pattern.size())
+            return false;
+        if (case_sensitive)
+            return str == pattern;
+        icu::UnicodeString ustr = icu::UnicodeString::fromUTF32(
+            reinterpret_cast<const UChar32*>(str.data()),
+            str.size()
+        );
+        icu::UnicodeString upattern = icu::UnicodeString::fromUTF32(
+            reinterpret_cast<const UChar32*>(pattern.data()),
+            pattern.size()
+        );
+        return ustr.caseCompare(upattern, U_FOLD_CASE_DEFAULT) == 0;
+    }
+
     static size_t skipws(points_to_token_and_input auto& iter, const points_to_token_and_input auto end, bool skip_newlines = false)
     {
         size_t count = 0;
@@ -965,12 +1028,20 @@ void ::supdef::parser::do_stage6()
             .default_runopts = std::nullopt,
             .supdefs = &m_supdefs,
             .runnables = &m_runnables,
-            .toplevel = true
+            .arguments = {},
+            .toplevel = true,
+            .in_supdef = false,
+            .in_runnable = false
         }
     );
 
-    auto tok = m_tokens.cbegin();
-    while (tok != m_tokens.cend())
+    this->execute_toplevel();
+}
+
+void ::supdef::parser::execute_toplevel()
+{
+    auto tok = m_tokens.begin();
+    while (tok != m_tokens.end())
     {
         /*
          * we have 4 things to look for:
@@ -996,48 +1067,23 @@ void ::supdef::parser::do_stage6()
          *    - update substitution context accordingly
          */
 
+        const auto tokcpy = tok;
+        auto rescanfromtok = [tokcpy, this] {
+            if (tokcpy != m_tokens.begin())
+                return std::prev(tokcpy);
+            return m_tokens.begin();
+        };
+
         switch (tok->kind)
         {
-        case token_kind::at: {
-        } break;
+        case token_kind::at:
+            tok = this->execute_directive(tok, tokcpy);
+            continue;
         case token_kind::identifier: {
         } break;
-        case token_kind::dollar: {
-            std::advance(tok, 1);
-            if (tok == m_tokens.cend())
-                break;
-            if (tok->kind == token_kind::dollar)
-            {
-                // escape sequence
-                m_tokens.erase(tok);
-                break;
-            }
-            if (tok->kind == token_kind::identifier)
-            {
-                std::list<token> subst;
-                auto&& [traversed, gotit] = m_ctx.traverse_until(
-                    [&subst, this, &tok](const ::supdef::parser::subsitution_context& ctx) noexcept -> bool {
-                        auto var = ctx.variables.find(tok->data.value());
-                        if (var != ctx.variables.end())
-                        {
-                            subst = var->second;
-                            return true;
-                        }
-                        return false;
-                    }
-                );
-                if (!gotit)
-                {
-                    printer::warning(
-                        "undefined variable `" + format(tok->data.value()) + "`",
-                        *tok, m_file.original_data(), &format
-                    );
-                    break;
-                }
-                std::advance(tok, -1);
-                m_tokens.erase(std::next(tok));
-            }
-        } break;
+        case token_kind::dollar:
+            tok = this->execute_variable_substitution(tok, tokcpy);
+            continue;
         default:
             break;
         }
@@ -1046,6 +1092,494 @@ void ::supdef::parser::do_stage6()
     }
 }
 
+namespace
+{
+    struct ascii_to_char32_view
+        : public stdranges::view_interface<ascii_to_char32_view>
+    {
+        struct iterator
+        {
+            using iterator_concept = std::u32string::iterator::iterator_concept;
+            using iterator_category = std::iterator_traits<std::u32string::iterator>::iterator_category;
+            using value_type = std::iterator_traits<std::u32string::iterator>::value_type;
+            using difference_type = std::iterator_traits<std::u32string::iterator>::difference_type;
+            using pointer = std::iterator_traits<std::u32string::iterator>::pointer;
+            using reference = std::iterator_traits<std::u32string::iterator>::reference;
+
+            constexpr iterator() noexcept = default;
+            constexpr iterator(const iterator&) noexcept = default;
+            constexpr iterator(iterator&&) noexcept = default;
+            constexpr iterator& operator=(const iterator&) noexcept = default;
+            constexpr iterator& operator=(iterator&&) noexcept = default;
+
+            constexpr iterator(std::string::iterator iter) noexcept
+                : m_iter{ std::move(iter) }
+            {
+            }
+
+            constexpr iterator& operator++() noexcept
+            {
+                std::advance(m_iter, 1);
+                return *this;
+            }
+
+            constexpr iterator operator++(int) noexcept
+            {
+                auto cpy = *this;
+                std::advance(m_iter, 1);
+                return cpy;
+            }
+
+            constexpr iterator& operator+=(difference_type n) noexcept
+            {
+                std::advance(m_iter, n);
+                return *this;
+            }
+
+            constexpr iterator operator+(difference_type n) noexcept
+            {
+                auto cpy = *this;
+                std::advance(m_iter, n);
+                return cpy;
+            }
+
+            constexpr iterator& operator--() noexcept
+            {
+                std::advance(m_iter, -1);
+                return *this;
+            }
+
+            constexpr iterator operator--(int) noexcept
+            {
+                auto cpy = *this;
+                std::advance(m_iter, -1);
+                return cpy;
+            }
+
+            constexpr iterator& operator-=(difference_type n) noexcept
+            {
+                std::advance(m_iter, -n);
+                return *this;
+            }
+
+            constexpr iterator operator-(difference_type n) noexcept
+            {
+                auto cpy = *this;
+                std::advance(m_iter, -n);
+                return cpy;
+            }
+
+            constexpr reference operator*() const noexcept
+            {
+                m_buf = static_cast<char32_t>(*m_iter);
+                return m_buf;
+            }
+
+            constexpr pointer operator->() const noexcept
+            {
+                return &m_buf;
+            }
+
+            constexpr auto operator<=>(const iterator& rhs) const noexcept
+            {
+                return m_iter <=> rhs.m_iter;
+            }
+        private:
+            std::string::iterator m_iter;
+            char32_t m_buf;
+        };
+        
+        constexpr ascii_to_char32_view(std::string& str) noexcept
+            : m_str{ std::addressof(str) }
+        {
+        }
+
+        constexpr ascii_to_char32_view(const ascii_to_char32_view&) noexcept = default;
+        constexpr ascii_to_char32_view(ascii_to_char32_view&&) noexcept = default;
+
+        constexpr ascii_to_char32_view& operator=(const ascii_to_char32_view&) noexcept = default;
+        constexpr ascii_to_char32_view& operator=(ascii_to_char32_view&&) noexcept = default;
+
+        constexpr iterator begin() const noexcept
+        {
+            return iterator{ m_str->begin() };
+        }
+
+        constexpr iterator end() const noexcept
+        {
+            return iterator{ m_str->end() };
+        }
+
+    private:
+        std::string* m_str;
+    };
+}
+
+std::list<::supdef::token>::iterator supdef::parser::execute_directive(
+    std::list<::supdef::token>::iterator tok, const std::list<::supdef::token>::iterator tokcpy
+)
+{
+    auto rescanfromtok = [tokcpy, this] {
+        if (tokcpy != m_tokens.begin())
+            return std::prev(tokcpy);
+        return m_tokens.begin();
+    };
+    auto ret = tokcpy;
+    std::advance(tok, 1);
+    skipws(tok, m_tokens.cend());
+    if (tok == m_tokens.end())
+        return m_tokens.end();
+    if (tok->kind != token_kind::keyword)
+    {
+        printer::warning(
+            "expected keyword after @",
+            *tok, m_file.original_data(), &format
+        );
+        return tok;
+    }
+    switch (tok->keyword)
+    {
+    // pragmas
+    case keyword_kind::pragma: {
+        // TODO: shall we delete the whole line from here ?
+        // Or maybe from execute_toplevel() ?
+        // Or maybe even splice the line out of m_tokens before passing iterators to execute_pragma() ?
+        bool at_start = at_start_of_line(tok, m_tokens.cbegin());
+        if (!at_start)
+        {
+            printer::warning(
+                "pragma must be at the start of a line",
+                *tok, m_file.original_data(), &format
+            );
+            return tok;
+        }
+        tok = this->execute_pragma(tok, tokcpy);
+    } break;
+    // these are handled in the next stage
+    case keyword_kind::dump:
+        [[__fallthrough__]];
+    case keyword_kind::embed:
+        break;
+    }
+}
+
+namespace
+{
+    template <size_t N>
+    struct bitset_inserter
+    {
+        using iterator_category = std::output_iterator_tag;
+        using iterator_concept = std::output_iterator_tag;
+        using value_type = void;
+        using difference_type = ptrdiff_t;
+        using pointer = void;
+        using reference = std::bitset<N>::reference;
+
+        constexpr bitset_inserter(std::bitset<N>& bs) noexcept
+            : m_bs{ std::addressof(bs) }
+            , m_idx{ 0 }
+        {
+        }
+
+        constexpr bitset_inserter(const bitset_inserter&) noexcept = default;
+        constexpr bitset_inserter(bitset_inserter&&) noexcept = default;
+
+        constexpr bitset_inserter& operator=(const bitset_inserter&) noexcept = default;
+        constexpr bitset_inserter& operator=(bitset_inserter&&) noexcept = default;
+
+#if 0
+        constexpr bitset_inserter& operator*() noexcept
+        {
+            return *this;
+        }
+
+        constexpr bitset_inserter& operator=(bool value) noexcept
+        {
+            (*m_bs)[m_idx] = value;
+            return *this;
+        }
+#else
+        constexpr reference operator*() noexcept
+        {
+            reference ref = (*m_bs)[m_idx];
+            return ref;
+        }
+#endif
+
+        constexpr bitset_inserter& operator++() noexcept
+        {
+            m_idx++;
+            return *this;
+        }
+
+        constexpr bitset_inserter operator++(int) noexcept
+        {
+            auto cpy = *this;
+            m_idx++;
+            return cpy;
+        }
+
+    private:
+        std::bitset<N>* m_bs;
+        size_t m_idx;
+    };
+}
+
+std::list<::supdef::token>::iterator supdef::parser::execute_pragma(
+    std::list<::supdef::token>::iterator tok, const std::list<::supdef::token>::iterator tokcpy
+)
+{
+    // @pragma supdef <pragma-name>
+    std::u32string_view supdef_pragma_list[] = {
+        U"newline"
+    };
+    // @pragma runnable <pragma-name>
+    std::u32string_view runnable_pragma_list[] = {
+        U"newline", U"mode" 
+    };
+    // @pragma runnable <lang-identifier> <pragma-name>
+    std::u32string_view runnable_lang_pragma_list[] = {
+        U"version", U"compiler_path", U"interpreter_path",
+        U"compiler_cmdline", U"interpreter_cmdline"
+    };
+    // @pragma <pragma-name>
+    std::u32string_view other_pragma_list[] = {
+        
+    };
+
+    auto rescanfromtok = [tokcpy, this] {
+        if (tokcpy != m_tokens.begin())
+            return std::prev(tokcpy);
+        return m_tokens.begin();
+    };
+    auto ret = tokcpy;
+    std::advance(tok, 1);
+    if (tok == m_tokens.end())
+        return m_tokens.end();
+    if (tok->kind != token_kind::identifier && tok->kind != token_kind::keyword)
+    {
+        printer::warning(
+            "expected identifier or keyword after @pragma",
+            *tok, m_file.original_data(), &format
+        );
+        return tok;
+    }
+
+    std::u32string_view pragma_name = tok->data.value();
+    if (strmatch(pragma_name, U"supdef"))
+    {
+        std::advance(tok, 1);
+        skipws(tok, m_tokens.cend());
+        if (tok == m_tokens.end())
+            return m_tokens.end();
+        if (tok->kind != token_kind::identifier)
+        {
+            printer::warning(
+                "expected identifier after @pragma supdef",
+                *tok, m_file.original_data(), &format
+            );
+            return tok;
+        }
+        pragma_name = tok->data.value();
+        
+        constexpr size_t possibilities = stdranges::distance(stdranges::begin(supdef_pragma_list), stdranges::end(supdef_pragma_list));
+        std::bitset<possibilities> pragma_macthes;
+        stdranges::transform(
+            supdef_pragma_list, bitset_inserter{pragma_macthes},
+            [&pragma_name](const std::u32string_view& sv) {
+                return strmatch(pragma_name, sv, false);
+            }
+        );
+
+        if (pragma_macthes.none())
+        {
+            printer::warning(
+                "unknown pragma `" + format(pragma_name) + "`",
+                *tok, m_file.original_data(), &format
+            );
+            return tok;
+        }
+        size_t longest     = 0,
+               longest_idx = 0;
+        for (size_t i = 0; i < possibilities; i++)
+        {
+            if (pragma_macthes[i] && supdef_pragma_list[i].size() > longest)
+            {
+                longest = supdef_pragma_list[i].size();
+                longest_idx = i;
+            }
+        }
+        switch (longest_idx)
+        {
+        case 0: { // newline
+            std::advance(tok, 1);
+            skipws(tok, m_tokens.cend());
+            if (tok == m_tokens.end())
+            {
+                printer::warning(
+                    "expected value after @pragma supdef newline",
+                    *std::prev(tok), m_file.original_data(), &format
+                );
+                return m_tokens.end();
+            }
+            auto astribool = supdef::registered_base::parse_bool_val(tok->data.value());
+            if (boost::logic::indeterminate(astribool))
+            {
+                printer::warning(
+                    "expected boolean value after @pragma supdef newline",
+                    *tok, m_file.original_data(), &format
+                );
+                return tok;
+            }
+            auto& opts = m_ctx.top().default_sdopts;
+            opts = opts.or_else(
+                [] { return std::make_optional(supdef::parser::registered_supdef::none_options); }
+            ).transform(
+                [astribool](auto&& opts) {
+                    opts.eat_newlines = static_cast<bool>(astribool) ? 0 : 1;
+                    return opts;
+                }
+            );
+        } break;
+        default:
+            break;
+        }
+
+        return tok;
+    }
+    if (strmatch(pragma_name, U"runnable"))
+    {
+
+    }
+
+    return tok;
+}
+
+std::list<::supdef::token>::iterator supdef::parser::execute_variable_substitution(
+    std::list<::supdef::token>::iterator tok, const std::list<::supdef::token>::iterator tokcpy
+)
+{
+    auto rescanfromtok = [tokcpy, this] {
+        if (tokcpy != m_tokens.begin())
+            return std::prev(tokcpy);
+        return m_tokens.begin();
+    };
+    auto ret = tokcpy;
+    std::advance(tok, 1);
+    if (tok == m_tokens.end())
+        return m_tokens.end();
+    if (tok->kind == token_kind::dollar)
+    {
+        // escape sequence
+        ret = m_tokens.erase(tok);
+        return ret;
+    }
+    if (tok->kind == token_kind::identifier)
+    {
+        // variable substitution
+        std::list<token> subst;
+        auto&& [traversed, gotit] = m_ctx.traverse_until(
+            [&subst, &tok, this](const ::supdef::parser::subsitution_context& ctx) noexcept -> bool {
+                auto var = ctx.variables.find(tok->data.value());
+                if (var != ctx.variables.end())
+                {
+                    subst = var->second;
+                    return true;
+                }
+                return false;
+            }
+        );
+        if (!gotit)
+        {
+            printer::warning(
+                "undefined variable `" + format(tok->data.value()) + "`",
+                *tok, m_file.original_data(), &format
+            );
+            return tok;
+        }
+        replace_from_to(m_tokens, tokcpy, std::next(tok), std::move(subst));
+        return rescanfromtok();
+    }
+    if (!m_ctx.top().toplevel)
+    {
+        if (tok->kind == token_kind::integer_literal)
+        {
+            // argument substitution
+            std::list<token> subst;
+            unsigned argnum;
+            try
+            {
+                argnum = std::stoul(tok->data.value());
+            }
+            catch (const std::exception& e)
+            {
+                printer::fatal(
+                    "invalid argument number `" + format(tok->data.value()) + "`" +
+                    " (got exception: " + e.what() + ")",
+                    *tok, m_file.original_data(), &format
+                );
+                ::exit(EXIT_FAILURE);
+            }
+            if (argnum >= m_ctx.top().arguments.size())
+            {
+                printer::warning(
+                    "argument number `" + format(tok->data.value()) + "` out of range",
+                    *tok, m_file.original_data(), &format
+                );
+                // erase the from `tokcpy` to `std::next(tok)`
+                return m_tokens.erase(tokcpy, std::next(tok));
+            }
+            subst = *stdranges::next(stdranges::begin(m_ctx.top().arguments), argnum);
+            replace_from_to(m_tokens, tokcpy, std::next(tok), std::move(subst));
+            return rescanfromtok();
+        }
+        if (tok->kind == token_kind::asterisk || tok->kind == token_kind::at)
+        {
+            // argument list substitution
+            token_loc tokloc = *tok;
+            tokloc.toksize = 1;
+            const token comma_token{
+                .loc = tokloc,
+                .data = std::u32string{ U"," },
+                .keyword = std::nullopt,
+                .kind = token_kind::comma
+            };
+            const token space_token{
+                .loc = tokloc,
+                .data = std::u32string{ U" " },
+                .keyword = std::nullopt,
+                .kind = token_kind::horizontal_whitespace
+            };
+            std::list<token> subst;
+            auto adaptor = stdviews::as_const | (
+                tok->kind == token_kind::at ?
+                    stdviews::join_with(comma_token) :
+                    stdviews::join_with(space_token)
+            );
+            for (const auto& arg : m_ctx.top().arguments | adaptor)
+                subst.push_back(arg);
+            replace_from_to(m_tokens, tokcpy, std::next(tok), std::move(subst));
+            return rescanfromtok();
+        }
+        if (tok->kind == token_kind::hash)
+        {
+            // argument count substitution
+            token replacement{
+                .loc = *tok,
+                .data = std::u32string{ },
+                .keyword = std::nullopt,
+                .kind = token_kind::integer_literal
+            };
+            std::string argcount = std::to_string(m_ctx.top().arguments.size());
+            ascii_to_char32_view argcount_iter{ argcount };
+            replacement.data = std::u32string{ argcount_iter.begin(), argcount_iter.end() };
+            replacement.loc.toksize = replacement.data.size();
+            replace_from_to(m_tokens, tokcpy, std::next(tok), replacement);
+            return rescanfromtok();
+        }
+    }
+    return tok;
+}
 
 [[__nodiscard__]]
 bool ::supdef::parser::add_child_parser(const stdfs::path& filename, ::supdef::token_kind pathtype) noexcept

@@ -51,6 +51,7 @@ namespace supdef
         at,                    // @
         tilde,                 // ~
         period,                // .
+        hash,                  // #
 
         backslash,             // <U+005C>
         inline_comment,        // // ...
