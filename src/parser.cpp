@@ -1156,7 +1156,7 @@ std::list<::supdef::token>::iterator supdef::parser::execute_directive(
             );
             return tok;
         }
-        std::list line = isolate_line(m_tokens, tok);
+        std::list line = this->m_ctx.top().toplevel ? isolate_line(m_tokens, tok) : copy_line(m_tokens, tok);
         // NOTE: tok is correctly updated by isolate_line()
         this->execute_pragma(line.begin(), line.end());
     } break;
@@ -1173,20 +1173,20 @@ void supdef::parser::execute_pragma(
 )
 {
     // @pragma supdef <pragma-name>
-    std::u32string_view supdef_pragma_list[] = {
+    std::u32string_view supdef_pragmas[] = {
         U"newline"
     };
     // @pragma runnable <pragma-name>
-    std::u32string_view runnable_pragma_list[] = {
+    std::u32string_view runnable_pragmas[] = {
         U"newline", U"mode" 
     };
     // @pragma runnable <lang-identifier> <pragma-name>
-    std::u32string_view runnable_lang_pragma_list[] = {
+    std::u32string_view runnable_lang_pragmas[] = {
         U"version", U"compiler_path", U"interpreter_path",
         U"compiler_cmdline", U"interpreter_cmdline"
     };
     // @pragma <pragma-name>
-    std::u32string_view other_pragma_list[] = {
+    std::u32string_view other_pragmas[] = {
         
     };
 
@@ -1204,7 +1204,7 @@ void supdef::parser::execute_pragma(
     }
 
     std::u32string_view pragma_name = iter->data.value();
-    if (strmatch(pragma_name, U"supdef") && stdranges::size(supdef_pragma_list))
+    if (strmatch(pragma_name, U"supdef") && stdranges::size(supdef_pragmas))
     {
         stdranges::advance(iter, 1);
         skipws(iter, end);
@@ -1220,19 +1220,19 @@ void supdef::parser::execute_pragma(
         }
         pragma_name = iter->data.value();
         
-        constexpr size_t possibilities = stdranges::distance(stdranges::begin(supdef_pragma_list), stdranges::end(supdef_pragma_list));
+        constexpr size_t possibilities = stdranges::distance(stdranges::begin(supdef_pragmas), stdranges::end(supdef_pragmas));
         std::bitset<possibilities> pragma_macthes;
         stdranges::transform(
-            supdef_pragma_list, bitset_inserter{pragma_macthes},
-            [&pragma_name](const std::u32string_view& sv) {
+            supdef_pragmas, bitset_inserter{pragma_macthes},
+            [pragma_name](const std::u32string_view& sv) {
                 return strmatch(pragma_name, sv, false);
             }
         );
 
         if (pragma_macthes.none())
         {
-            printer::warning(
-                "unknown pragma `" + format(pragma_name) + "`",
+            printer::error(
+                "unknown pragma `@pragma supdef " + format(pragma_name) + "` (skiping)",
                 *iter, m_file.original_data(), &format
             );
             return;
@@ -1241,9 +1241,9 @@ void supdef::parser::execute_pragma(
                longest_idx = 0;
         for (size_t i = 0; i < possibilities; i++)
         {
-            if (pragma_macthes[i] && supdef_pragma_list[i].size() > longest)
+            if (pragma_macthes[i] && supdef_pragmas[i].size() > longest)
             {
-                longest = supdef_pragma_list[i].size();
+                longest = supdef_pragmas[i].size();
                 longest_idx = i;
             }
         }
@@ -1269,26 +1269,54 @@ void supdef::parser::execute_pragma(
                 );
                 return;
             }
-            auto& opts = m_ctx.top().default_sdopts;
-            opts = opts.or_else(
-                [] { return std::make_optional(supdef::parser::registered_supdef::none_options); }
+            auto& top_sdopts = m_ctx.top().default_sdopts;
+            top_sdopts = std::optional(
+                std::move(top_sdopts).value_or(supdef::parser::registered_supdef::none_options)
             ).transform(
                 [astribool](auto&& opts) {
-                    opts.eat_newlines = static_cast<bool>(astribool) ? 0 : 1;
+                    opts.eat_newlines = static_cast<bool>(astribool) ? 0U : 1U;
                     return opts;
                 }
             );
         } break;
         default:
-            break;
+            std::unreachable();
         }
 
         return;
     }
-    if (strmatch(pragma_name, U"runnable"))
+    if (strmatch(pragma_name, U"runnable") && stdranges::size(runnable_pragmas) + stdranges::size(runnable_lang_pragmas))
     {
+        TODO("implement runnable pragma parsing");
+        return;
+        stdranges::advance(iter, 1);
+        skipws(iter, end);
+        if (iter == end)
+            return;
+        if (iter->kind != token_kind::identifier)
+        {
+            printer::warning(
+                "expected identifier after @pragma runnable",
+                *iter, m_file.original_data(), &format
+            );
+            return;
+        }
 
+        std::u32string_view lang_or_prag = iter->data.value();
+        if (supdef::parser::registered_runnable::is_lang_identifier(lang_or_prag))
+        {
+            // parse runnable lang pragma
+            auto lang = supdef::parser::registered_runnable::parse_lang(lang_or_prag);
+        }
+        else
+        {
+            // parse runnable pragma
+        }
+
+        return;
     }
+    TODO("implement other pragma parsing");
+    return;
 }
 
 std::list<::supdef::token>::iterator supdef::parser::execute_variable_substitution(

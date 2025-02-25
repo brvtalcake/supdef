@@ -2,8 +2,122 @@
 # include <parser.hpp>
 #endif
 
+#include <boost/mpl/for_each.hpp>
+#include <boost/mpl/vector.hpp>
+#include <boost/mpl/transform.hpp>
+#include <boost/mpl/transform_view.hpp>
+
 namespace
 {
+    template <typename T, size_t N>
+    constexpr std::array<T, N> mk_array(const T(&arr)[N]) noexcept
+    {
+        return std::to_array(arr);
+    }
+
+    template <typename T, typename... Args, size_t N = sizeof...(Args)>
+    constexpr std::array<T, N> mk_array(Args&&... args) noexcept
+    {
+        T arr[N] = { std::forward<Args>(args)... };
+        return std::to_array(arr);
+    }
+
+    template <typename T, typename... Args, size_t... Is, size_t N = sizeof...(Args)>
+    constexpr std::array<T, N> mk_array(const std::tuple<Args...>& tup, std::index_sequence<Is...>) noexcept
+    {
+        return std::array<T, N>{ std::get<Is>(tup)... };
+    }
+
+    template <typename T, typename... Args, size_t... Is, size_t N = sizeof...(Args)>
+    constexpr std::array<T, N> mk_array(std::tuple<Args...>&& tup, std::index_sequence<Is...>) noexcept
+    {
+        return std::array<T, N>{ std::move(std::get<Is>(tup))... };
+    }
+
+    template <typename T, typename... Args, size_t N = sizeof...(Args)>
+    constexpr std::array<T, N> mk_array(const std::tuple<Args...>& tup) noexcept
+    {
+        return mk_array<T>(tup, std::index_sequence_for<Args...>{});
+    }
+
+    template <typename T, typename... Args, size_t N = sizeof...(Args)>
+    constexpr std::array<T, N> mk_array(std::tuple<Args...>&& tup) noexcept
+    {
+        return mk_array<T>(std::move(tup), std::index_sequence_for<Args...>{});
+    }
+
+    template <typename... Types>
+    struct typelist
+    {
+        using types = std::tuple<Types...>;
+    };
+
+    template <typename T, size_t N>
+    static constexpr auto as_tuple(const std::array<T, N>& arr) noexcept
+    {
+        return std::apply([](auto&&... args) {
+            return std::make_tuple(std::forward<decltype(args)>(args)...);
+        }, arr);
+    }
+
+    template <typename T, size_t N>
+    static constexpr auto as_tuple(std::array<T, N>&& arr) noexcept
+    {
+        return std::apply([](auto&&... args) {
+            return std::make_tuple(std::forward<decltype(args)>(args)...);
+        }, std::move(arr));
+    }
+
+    template <typename... T1Types, typename... T2Types, size_t... Is>
+    static constexpr auto zip_impl(
+        const std::tuple<T1Types...>& t1, const std::tuple<T2Types...>& t2,
+        std::index_sequence<Is...>
+    ) -> std::tuple<std::tuple<T1Types, T2Types>...>
+    {
+        return std::make_tuple( std::make_tuple( std::get<Is>(t1), std::get<Is>(t2) )... );
+    }
+
+    template <typename... T1Types, typename... T2Types>
+        requires (sizeof...(T1Types) == sizeof...(T2Types))
+    static constexpr auto zip(
+        const std::tuple<T1Types...>& t1, const std::tuple<T2Types...>& t2
+    ) -> std::tuple<std::tuple<T1Types, T2Types>...>
+    {
+        return zip_impl(t1, t2, std::index_sequence_for<T1Types...>{});
+    }
+
+    template <typename... T1Types, typename... T2Types, typename... OtherTypes>
+        requires (sizeof...(T1Types) == sizeof...(T2Types))
+    static constexpr auto zip(
+        const std::tuple<T1Types...>& t1, const std::tuple<T2Types...>& t2,
+        OtherTypes&&... others
+    ) -> decltype(zip(zip(t1, t2), std::forward<OtherTypes>(others)...))
+    {
+        return zip(zip(t1, t2), std::forward<OtherTypes>(others)...);
+    }
+        
+    static constexpr auto find_closing(
+        std::input_iterator auto start, std::input_iterator auto end,
+        std::invocable<std::iter_value_t<decltype(start)>> auto is_open,
+        std::invocable<std::iter_value_t<decltype(start)>> auto is_close
+    ) requires std::same_as<std::invoke_result_t<decltype(is_open),  std::iter_value_t<decltype(start)>>, bool> &&
+               std::same_as<std::invoke_result_t<decltype(is_close), std::iter_value_t<decltype(start)>>, bool> &&
+               std::same_as<decltype(start), decltype(end)>
+    {
+        long long depth = 1;
+        while (start != end)
+        {
+            if (is_open(*start))
+                depth++;
+            else if (is_close(*start))
+                depth--;
+            if (depth == 0)
+                return start;
+            stdranges::advance(start, 1);
+        }
+        return end;
+    }
+
     struct ascii_to_char32_view
         : public stdranges::view_interface<ascii_to_char32_view>
     {
@@ -22,8 +136,9 @@ namespace
             constexpr iterator& operator=(const iterator&) noexcept = default;
             constexpr iterator& operator=(iterator&&) noexcept = default;
 
-            constexpr iterator(std::string::iterator iter) noexcept
-                : m_iter{ std::move(iter) }
+            constexpr iterator(std::string_view::iterator iter) noexcept
+                : m_iter( iter )
+                , m_buf( 0 )
             {
             }
 
@@ -46,11 +161,13 @@ namespace
                 return *this;
             }
 
-            constexpr iterator operator+(difference_type n) noexcept
+            friend constexpr iterator operator+(const iterator& it, difference_type n) noexcept
             {
-                auto cpy = *this;
-                stdranges::advance(m_iter, n);
-                return cpy;
+                return iterator{ it.m_iter + n };
+            }
+            friend constexpr iterator operator+(difference_type n, const iterator& it) noexcept
+            {
+                return iterator{ it.m_iter + n };
             }
 
             constexpr iterator& operator--() noexcept
@@ -72,11 +189,14 @@ namespace
                 return *this;
             }
 
-            constexpr iterator operator-(difference_type n) noexcept
+            friend constexpr iterator operator-(const iterator& it, difference_type n) noexcept
             {
-                auto cpy = *this;
-                stdranges::advance(m_iter, -n);
-                return cpy;
+                return iterator{ it.m_iter - n };
+            }
+
+            constexpr difference_type operator-(const iterator& other) const noexcept
+            {
+                return m_iter - other.m_iter;
             }
 
             constexpr reference operator*() const noexcept
@@ -87,24 +207,36 @@ namespace
 
             constexpr pointer operator->() const noexcept
             {
+                m_buf = static_cast<char32_t>(*m_iter);
                 return &m_buf;
             }
 
-            constexpr auto operator<=>(const iterator& rhs) const noexcept
+            constexpr reference operator[](difference_type n) const noexcept
             {
-                return m_iter <=> rhs.m_iter;
+                m_buf = *(*this + n);
+                return m_buf;
+            }
+
+            friend constexpr std::strong_ordering operator<=>(const iterator& lhs, const iterator& rhs) noexcept
+            {
+                return lhs.m_iter <=> rhs.m_iter;
+            }
+
+            friend constexpr bool operator==(const iterator& lhs, const iterator& rhs) noexcept
+            {
+                return lhs.m_iter == rhs.m_iter;
             }
         private:
             std::string_view::iterator m_iter;
-            char32_t m_buf;
+            mutable char32_t m_buf;
         };
         
         constexpr ascii_to_char32_view(std::string& str) noexcept
-            : m_str{ str }
+            : m_sv{ str }
         {
         }
         constexpr ascii_to_char32_view(std::string_view sv) noexcept
-            : m_str{ sv }
+            : m_sv{ sv }
         {
         }
 
@@ -116,17 +248,22 @@ namespace
 
         constexpr iterator begin() const noexcept
         {
-            return iterator{ m_str.begin() };
+            return iterator{ m_sv.begin() };
         }
 
         constexpr iterator end() const noexcept
         {
-            return iterator{ m_str.end() };
+            return iterator{ m_sv.end() };
         }
 
     private:
-        std::string_view m_str;
+        std::string_view m_sv;
     };
+
+    static_assert(std::three_way_comparable<ascii_to_char32_view::iterator>);
+    static_assert(stdranges::forward_range<ascii_to_char32_view>);
+    static_assert(stdranges::random_access_range<ascii_to_char32_view>);
+    static_assert(std::sized_sentinel_for<ascii_to_char32_view::iterator, ascii_to_char32_view::iterator>);
 
     static bool strmatch(
         const std::u32string_view str, const std::u32string_view pattern,
@@ -177,7 +314,42 @@ namespace
         using value_type = void;
         using difference_type = ptrdiff_t;
         using pointer = void;
-        using reference = std::bitset<N>::reference;
+        
+        class reference
+        {
+            friend struct bitset_inserter;
+
+        public:
+            constexpr reference() noexcept = default;
+
+            constexpr reference& operator=(bool value) noexcept
+            {
+                (*m_bs_ref)[*m_idx_ref] = value;
+                return *this;
+            }
+
+            constexpr const reference& operator=(bool value) const noexcept
+            {
+                (*m_bs_ref)[*m_idx_ref] = value;
+                return *this;
+            }
+
+            constexpr operator bool() const noexcept
+            {
+                return (*m_bs_ref)[*m_idx_ref];
+            }
+
+        private:
+
+            reference(std::bitset<N>* bs, size_t* idx) noexcept
+                : m_bs_ref{ bs }
+                , m_idx_ref{ idx }
+            {
+            }
+
+            std::bitset<N>* m_bs_ref;
+            size_t* m_idx_ref;
+        };
 
         constexpr bitset_inserter(std::bitset<N>& bs) noexcept
             : m_bs{ std::addressof(bs) }
@@ -205,7 +377,7 @@ namespace
 #else
         constexpr reference operator*() noexcept
         {
-            reference ref = (*m_bs)[m_idx];
+            reference ref{ m_bs, &m_idx };
             return ref;
         }
 #endif
@@ -266,12 +438,12 @@ constexpr boost::logic::tribool supdef::registered_base::parse_bool_val(
     using namespace std::string_view_literals;
 
     if (
-        (sv.size() == 1 && ::supdef::unicat::is_digit(sv.front()) && ::supdef::unicode::numeric_value(sv.front()) == 0) ||
+        (sv.size() == 1 && ::supdef::unicat::is_digit(sv.front()) && ::supdef::unicode::numeric_value<long long>(sv.front()) == 0) ||
         strmatch(sv, U"false"sv, false) || strmatch(sv, U"no"sv, false) || strmatch(sv, U"off"sv, false)
     )
         return false;
     if (
-        (sv.size() == 1 && ::supdef::unicat::is_digit(sv.front()) && ::supdef::unicode::numeric_value(sv.front()) != 0) ||
+        (sv.size() == 1 && ::supdef::unicat::is_digit(sv.front()) && ::supdef::unicode::numeric_value<long long>(sv.front()) != 0) ||
         strmatch(sv, U"true"sv, false) || strmatch(sv, U"yes"sv, false) || strmatch(sv, U"on"sv, false)
     )
         return true;
@@ -299,12 +471,66 @@ constexpr boost::logic::tribool supdef::registered_base::parse_bool_opt(
     return parse_bool_val(sv);
 }
 
-constexpr std::optional<supdef::parser::registered_runnable::lang>
+namespace detail
+{
+    namespace runnable_langs
+    {
+        static constexpr auto _get_all_langs()
+        {
+#if defined(__INTELLISENSE__)
+            constexpr std::array<std::tuple<std::u32string_view, ::supdef::parser::registered_runnable::lang::identifier>, 0> langs = {};
+#else
+            constexpr std::array basic_langs_names  = magic_enum::enum_names <::supdef::parser::registered_runnable::lang::identifier>();
+            constexpr std::array basic_langs_values = magic_enum::enum_values<::supdef::parser::registered_runnable::lang::identifier>();
+            static_assert(basic_langs_names.size() == basic_langs_values.size());
+            static_assert(basic_langs_names.size() == ::supdef::parser::registered_runnable::lang::_langidentcount);
+
+            constexpr std::tuple aliases_langs = std::make_tuple(
+                std::make_tuple (
+                    std::string_view{ "c++" },
+                    ::supdef::parser::registered_runnable::lang::identifier::cpp
+                ),
+                std::make_tuple (
+                    std::string_view{ "cxx" },
+                    ::supdef::parser::registered_runnable::lang::identifier::cpp
+                ),
+                std::make_tuple (
+                    std::string_view{ "c#" },
+                    ::supdef::parser::registered_runnable::lang::identifier::csharp
+                ),
+                std::make_tuple (
+                    std::string_view{ "f#" },
+                    ::supdef::parser::registered_runnable::lang::identifier::fsharp
+                )
+            );
+
+            constexpr std::tuple all_langs = std::tuple_cat(
+                zip(
+                    as_tuple(basic_langs_names), as_tuple(basic_langs_values)
+                ),
+                aliases_langs
+            );
+
+            constexpr std::array langs = mk_array<
+                std::tuple<
+                    std::string_view,
+                    ::supdef::parser::registered_runnable::lang::identifier
+                >
+            >(all_langs);
+#endif
+            return langs;
+        }
+    }
+}
+
+constexpr std::optional<supdef::parser::registered_runnable::lang::identifier>
 supdef::parser::registered_runnable::is_lang_identifier(std::u32string_view sv)
 {
-    constexpr std::array langs = magic_enum::enum_values<::supdef::parser::registered_runnable::lang::identifier>();
-    static_assert(langs.size() == ::supdef::parser::registered_runnable::lang::_langidentcount);
+    constexpr std::array langs = ::detail::runnable_langs::_get_all_langs();
+    
     std::bitset<langs.size()> matches;
+    static_assert(std::indirectly_writable<bitset_inserter<langs.size()>, bool>);
+
     stdranges::transform(
         langs, bitset_inserter{matches},
         // op
@@ -312,8 +538,54 @@ supdef::parser::registered_runnable::is_lang_identifier(std::u32string_view sv)
             return strmatch(sv, langident, false);
         },
         // projection of range `langs`
-        [](const std::string_view& original_langident) {
-            return ascii_to_char32_view{ original_langident };
+        [](const std::tuple<std::string_view, ::supdef::parser::registered_runnable::lang::identifier>& lang) {
+            return ascii_to_char32_view{ std::get<0>(lang) };
         }
     );
+    if (matches.none())
+        return std::nullopt;
+    size_t longest = 0, longest_idx = 0;
+    for (size_t i = 0; i < langs.size(); i++)
+    {
+        if (matches._Unchecked_test(i) && std::get<0>(langs[i]).size() > longest)
+        {
+            longest = std::get<0>(langs[i]).size();
+            longest_idx = i;
+        }
+    }
+    return std::get<1>(langs[longest_idx]);
 }
+
+#if 0
+#undef  __MK_ASSERT
+#undef  __MK_UNASSERT
+#define __MK_ASSERT(xstr, xval) static_assert( \
+    ::supdef::parser::registered_runnable::is_lang_identifier(U ## xstr).has_value() && \
+    ::supdef::parser::registered_runnable::is_lang_identifier(U ## xstr).value() == ::supdef::parser::registered_runnable::lang::identifier::xval, \
+    #xstr " should be a valid language identifier" \
+)
+#define __MK_UNASSERT(xstr) static_assert( \
+    !::supdef::parser::registered_runnable::is_lang_identifier(U ## xstr).has_value(), \
+    #xstr " should not be a valid language identifier" \
+)
+
+__MK_ASSERT("c", c);
+__MK_ASSERT("cpp", cpp);
+__MK_ASSERT("cxx", cpp);
+__MK_ASSERT("c++", cpp);
+__MK_ASSERT("rust", rust);
+__MK_ASSERT("d", d);
+__MK_ASSERT("zig", zig);
+__MK_ASSERT("csharp", csharp);
+__MK_ASSERT("c#", csharp);
+__MK_ASSERT("fsharp", fsharp);
+__MK_ASSERT("f#", fsharp);
+__MK_ASSERT("java", java);
+
+__MK_UNASSERT("c#sharp");
+__MK_UNASSERT("f#sharp");
+__MK_UNASSERT("fsharp#");
+
+#undef __MK_ASSERT
+#undef __MK_UNASSERT
+#endif

@@ -166,152 +166,139 @@ namespace supdef
         );
     };
 
+    struct registered_supdef
+        : private registered_base
+    {
+        PACKED_STRUCT(options)
+        {
+            unsigned eat_newlines : 1;
+        };
+
+        static constexpr options none_options = options{.eat_newlines = 0};
+
+        static constexpr options parse_options(const std::u32string &str);
+
+        options opts;
+        std::u32string name;
+        std::vector<std::vector<::supdef::token>> lines;
+    };
+
+    struct registered_runnable
+        : private registered_base
+    {
+        struct lang
+        {
+            struct cmdline_source_placeholder { };
+            struct cmdline_executable_placeholder { };
+            struct cmdline_compiler_placeholder { };
+            struct cmdline_interpreter_placeholder { };
+            struct cmdline_version_placeholder { };
+            struct cmdline_joinargs_placeholder { };
+
+            using cmdline_args_type = std::variant<
+                cmdline_source_placeholder,
+                cmdline_executable_placeholder,
+                cmdline_compiler_placeholder,
+                cmdline_interpreter_placeholder,
+                cmdline_version_placeholder,
+                cmdline_joinargs_placeholder,
+                std::u32string>;
+
+            struct execinfo
+            {
+                // the standard / version used / needed
+                std::u32string version;
+
+                // the compiler and interpreter used, if needed
+                std::optional<stdfs::path> compiler, interpreter;
+
+                // the options if needed
+                std::vector<cmdline_args_type> compiler_cmdline, execution_cmdline;
+            } exinfo;
+
+            // the language used
+            enum class identifier
+            {
+                c = 1, cpp, rust, d, zig,
+                csharp, fsharp,
+                java,
+                ocaml, racket, haskell,
+                python, shell, perl, ruby
+            } ident;
+            static constexpr size_t _langidentcount = static_cast<size_t>(identifier::ruby);
+        };
+
+        PACKED_STRUCT(options)
+        {
+            enum class mode : unsigned
+            {
+                compileok = 0b00,
+                trycompile = compileok,
+
+                runok = 0b01,
+                tryrun = runok,
+
+                getoutput = 0b10,
+
+                retval = 0b11
+            };
+            unsigned eat_newlines : 1;
+            unsigned mode : 2;
+        };
+
+        static constexpr std::optional<lang::identifier> is_lang_identifier(std::u32string_view sv);
+        static constexpr options parse_options(const std::u32string &str);
+        static constexpr lang parse_lang(const std::u32string &str);
+
+        lang langinfo;
+        options opts;
+        std::u32string name;
+        std::vector<std::vector<::supdef::token>> lines;
+    };
+
+    struct subsitution_context
+    {
+        umap<std::u32string, std::list<token>> variables;
+        /* umultimap<registered_runnable::lang::identifier, std::u32string> lang_aliases; */
+        umap<registered_runnable::lang::identifier, registered_runnable::lang::execinfo> default_langinfo;
+        std::optional<registered_supdef::options> default_sdopts;
+        std::optional<registered_runnable::options> default_runopts;
+        umap<std::u32string, registered_supdef> *supdefs;
+        umap<std::u32string, registered_runnable> *runnables;
+        std::vector<std::list<token>> arguments;
+        bool toplevel, in_supdef, in_runnable;
+    };
+
     class parser
     {
-        struct parser_compare
-        {
-            using ret_type = decltype(std::declval<stdfs::path>() <=> std::declval<stdfs::path>());
-
-            enum class op
-            {
-                less,
-                greater,
-                equal
-            };
-        protected:
-            static bool do_less(const stdfs::path& lhs, const stdfs::path& rhs)
-            {
-                return lhs < rhs;
-            }
-
-        public:
-            static bool operator()(const parser& lhs, const parser& rhs, op op = op::less)
-            {
-                if (op == op::less)
-                    return do_less(*lhs.m_file.filename(), *rhs.m_file.filename());
-                std::unreachable(); // not implemented
-            }
-        };
-
-        friend parser_compare;
-
-        template <typename ParsedT>
-        using parser_return = std::tuple<
-            std::list<token>::const_iterator,
-            std::list<token>::const_iterator,
-            std::optional<ParsedT>
-        >;
-
-        [[__nodiscard__]]
-        bool add_child_parser(const stdfs::path& filename, token_kind pathtype) noexcept;
+        friend struct parser_compare;
 
     public:
-        struct registered_supdef
-            : private registered_base
+        enum output_kind : uint_fast8_t
         {
-            PACKED_STRUCT(options)
-            {
-                unsigned eat_newlines : 1;
-            };
+            text      = 1U << 0,
+            tokens    = 1U << 1,
+            ast       = 1U << 2,
+            imports   = 1U << 3,
+            supdefs   = 1U << 4,
+            recursive = 1U << 6,
+            original  = 1U << 7,
 
-            static constexpr options none_options = options{ .eat_newlines = 0 };
-
-            static constexpr options parse_options(const std::u32string& str);
-
-            options opts;
-            std::u32string name;
-            std::vector<std::vector<::supdef::token>> lines;
-        };
-
-        struct registered_runnable
-            : private registered_base
-        {
-            TODO(make it possible to use e.g. "@pragma compiler_path C <path>");
-            struct lang
-            {
-                struct cmdline_source_placeholder { };
-                struct cmdline_executable_placeholder { };
-                struct cmdline_compiler_placeholder { };
-                struct cmdline_interpreter_placeholder { };
-                struct cmdline_version_placeholder { };
-                struct cmdline_joinargs_placeholder { };
-            
-                using cmdline_args_type = std::variant<
-                    cmdline_source_placeholder,
-                    cmdline_executable_placeholder,
-                    cmdline_compiler_placeholder,
-                    cmdline_interpreter_placeholder,
-                    cmdline_version_placeholder,
-                    cmdline_joinargs_placeholder,
-                    std::u32string
-                >;
-
-                struct execinfo
-                {
-                    // the standard / version used / needed
-                    std::u32string version;
-
-                    // the compiler and interpreter used, if needed
-                    std::optional<stdfs::path> compiler, interpreter;
-
-                    // the options if needed
-                    std::vector<cmdline_args_type> compiler_cmdline, execution_cmdline;
-                } exinfo;
-
-                // the language used
-                enum class identifier
-                {
-                    c = 1, cpp, rust, d, zig,
-                    csharp, fsharp,
-                    java,
-                    ocaml, racket, haskell,
-                    python, shell, perl, ruby,
-                } ident;
-                static constexpr size_t _langidentcount = identifier::ruby;
-            };
-
-            PACKED_STRUCT(options)
-            {
-                enum class mode : unsigned
-                {
-                    compileok  = 0b00,
-                    trycompile = compileok,
-
-                    runok      = 0b01,
-                    tryrun     = runok,
-
-                    getoutput  = 0b10,
-
-                    retval     = 0b11
-                };
-                unsigned eat_newlines : 1;
-                unsigned mode : 2;
-            };
-
-            static constexpr std::optional<lang> is_lang_identifier(std::u32string_view sv);
-            static constexpr options parse_options(const std::u32string& str);
-            static constexpr lang parse_lang(const std::u32string& str);
-
-            lang langinfo;
-            options opts;
-            std::u32string name;
-            std::vector<std::vector<::supdef::token>> lines;
-        };
-
-        struct subsitution_context
-        {
-            umap<std::u32string, std::list<token>> variables;
-            /* umultimap<registered_runnable::lang::identifier, std::u32string> lang_aliases; */
-            umap<registered_runnable::lang::identifier, registered_runnable::lang::execinfo> default_langinfo;
-            std::optional<registered_supdef::options> default_sdopts;
-            std::optional<registered_runnable::options> default_runopts;
-            umap<std::u32string, registered_supdef>* supdefs;
-            umap<std::u32string, registered_runnable>* runnables;
-            std::vector<std::list<token>> arguments;
-            bool toplevel, in_supdef, in_runnable;
+            recursive_supdefs = supdefs
+                              | recursive,
+            all               = text
+                              | tokens
+                              | ast
+                              | imports
+                              | supdefs
+                              | recursive
+                              | original
         };
     
     protected:
+        [[__nodiscard__]]
+        bool add_child_parser(const stdfs::path& filename, token_kind pathtype) noexcept;
+
         static std::optional<std::pair<registered_supdef::options, std::u32string>>
         parse_supdef_start(
             std::list<token>::const_iterator line_start,
@@ -335,6 +322,7 @@ namespace supdef
             const std::u32string& origdata
         );
 
+#if 0
         std::optional<registered_supdef> get_supdef(const std::u32string& name, bool recurse = true) const noexcept;
         
         void execute_toplevel();
@@ -348,9 +336,9 @@ namespace supdef
         /* std::list<token>::iterator */
         void
         execute_pragma(const std::list<token>::iterator start, const std::list<token>::iterator end);
+#endif
 
     public:
-
         parser(const stdfs::path& filename);
         parser(stdfs::path&& filename);
         ~parser();
@@ -372,30 +360,17 @@ namespace supdef
         // process @embed and @dump calls
         void do_stage7();
 
-        enum output_kind : uint_fast8_t
-        {
-            text      = 1U << 0,
-            tokens    = 1U << 1,
-            ast       = 1U << 2,
-            imports   = 1U << 3,
-            supdefs   = 1U << 4,
-            recursive = 1U << 6,
-            original  = 1U << 7,
-
-            recursive_supdefs = supdefs
-                              | recursive,
-            all               = text
-                              | tokens
-                              | ast
-                              | imports
-                              | supdefs
-                              | recursive
-                              | original
-        };
-
         void output_to(std::ostream& os, output_kind kind = text);
         void output_to(const std::filesystem::path& filename, output_kind kind = text);
 
+        bool operator==(const parser& rhs) const
+        {
+            auto thispath = *m_file.filename();
+            auto rhspath  = *rhs.m_file.filename();
+            assert(thispath.is_absolute());
+            assert(rhspath.is_absolute());
+            return thispath == rhspath;
+        }
         parser_compare::ret_type operator<=>(const parser& rhs) const
         {
             auto thispath = *m_file.filename();
@@ -404,6 +379,7 @@ namespace supdef
             assert(rhspath.is_absolute());
             return thispath <=> rhspath;
         }
+    
     private:
         using supdef_map_type   = umap<std::u32string, registered_supdef>;
         using runnable_map_type = umap<std::u32string, registered_runnable>;
@@ -413,6 +389,31 @@ namespace supdef
         std::set<parser> m_imported_parsers;
         supdef_map_type m_supdefs;
         runnable_map_type m_runnables;
+    };
+
+    struct parser_compare
+    {
+        using ret_type = decltype(std::declval<stdfs::path>() <=> std::declval<stdfs::path>());
+
+        enum class op
+        {
+            less,
+            greater,
+            equal
+        };
+    protected:
+        static bool do_less(const stdfs::path& lhs, const stdfs::path& rhs)
+        {
+            return lhs < rhs;
+        }
+
+    public:
+        static bool operator()(const parser& lhs, const parser& rhs, op op = op::less)
+        {
+            if (op == op::less)
+                return do_less(*lhs.m_file.filename(), *rhs.m_file.filename());
+            std::unreachable(); // not implemented
+        }
     };
 }
 
