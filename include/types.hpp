@@ -1,6 +1,8 @@
 #ifndef TYPES_HPP
 #define TYPES_HPP
 
+#include <version.hpp>
+
 #include <concepts>
 #include <type_traits>
 #include <source_location>
@@ -34,6 +36,9 @@ static_assert(
 #include <boost/stl_interfaces/sequence_container_interface.hpp>
 #include <boost/stl_interfaces/view_adaptor.hpp>
 #include <boost/stl_interfaces/view_interface.hpp>
+
+#include <boost/smart_ptr/local_shared_ptr.hpp>
+#include <boost/smart_ptr/make_local_shared.hpp>
 
 #include <experimental/scope>
 
@@ -142,6 +147,45 @@ namespace supdef
             >
         >::value
     );
+
+#if SUPDEF_MULTITHREADED
+    template <typename T>
+    using shared_ptr = std::shared_ptr<T>;
+#else
+    template <typename T>
+    using shared_ptr = boost::local_shared_ptr<T>;
+#endif
+
+    namespace detail
+    {
+        template <typename T, typename... Args>
+        consteval bool make_shared_is_noexcept()
+        {
+            return static_cast<bool>(
+                noexcept(
+#if SUPDEF_MULTITHREADED
+                    std::make_shared<T>(std::declval<Args>()...)
+#else
+                    boost::make_local_shared<T>(std::declval<Args>()...)
+#endif
+                )
+            );
+        }
+    }
+
+    // make_shared
+    template <typename T, typename... Args>
+    static inline ::supdef::shared_ptr<T> make_shared(Args&&... args)
+        noexcept(
+            ::supdef::detail::make_shared_is_noexcept<T, Args...>()
+        )
+    {
+#if SUPDEF_MULTITHREADED
+        return std::make_shared<T>(std::forward<Args>(args)...);
+#else
+        return boost::make_local_shared<T>(std::forward<Args>(args)...);
+#endif
+    }
 }
 
 #endif

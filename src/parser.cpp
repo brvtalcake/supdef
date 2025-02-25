@@ -5,7 +5,7 @@
 #include <detail/globals.hpp>
 
 GLOBAL_GETTER_DECL(
-    std::vector<std::shared_ptr<const stdfs::path>>,
+    std::vector<shared_ptr<const stdfs::path>>,
     already_processed_files
 );
 
@@ -1021,7 +1021,7 @@ void ::supdef::parser::do_stage6()
         bd::debugger_break();
     m_ctx.make_empty();
     m_ctx.push(
-        ::supdef::parser::subsitution_context{
+        ::supdef::parser::substitution_context{
             .variables = {},
             .default_langinfo = DEFAULT_LANG_INFO(),
             .default_sdopts = std::nullopt,
@@ -1343,7 +1343,7 @@ std::list<::supdef::token>::iterator supdef::parser::execute_variable_substituti
         // variable substitution
         std::list<token> subst;
         auto&& [traversed, gotit] = m_ctx.traverse_until(
-            [&subst, &tok, this](const ::supdef::parser::subsitution_context& ctx) noexcept -> bool {
+            [&subst, &tok, this](const ::supdef::parser::substitution_context& ctx) noexcept -> bool {
                 auto var = ctx.variables.find(tok->data.value());
                 if (var != ctx.variables.end())
                 {

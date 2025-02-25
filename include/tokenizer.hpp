@@ -86,7 +86,7 @@ namespace supdef
 
     struct token_loc
     {
-        std::shared_ptr<const stdfs::path> filename;
+        shared_ptr<const stdfs::path> filename;
         size_t line;
         size_t column;
 
@@ -105,14 +105,14 @@ namespace supdef
     class tokenizer
     {
     public:
-        tokenizer(const std::u32string &data, std::shared_ptr<const stdfs::path> filename = nullptr);
+        tokenizer(const std::u32string &data, shared_ptr<const stdfs::path> filename = nullptr);
         ~tokenizer();
 
-        std::generator<token> tokenize(std::shared_ptr<const stdfs::path> filename = nullptr);
+        std::generator<token> tokenize(shared_ptr<const stdfs::path> filename = nullptr);
 
     private:
         std::u32string m_data;
-        std::shared_ptr<const stdfs::path> m_filename;
+        shared_ptr<const stdfs::path> m_filename;
     };
 }
 

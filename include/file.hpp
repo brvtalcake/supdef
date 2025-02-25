@@ -62,11 +62,11 @@ namespace supdef
         std::u32string& data() noexcept;
         const std::u32string& original_data() const noexcept;
         
-        std::shared_ptr<const stdfs::path> filename() const noexcept;
+        shared_ptr<const stdfs::path> filename() const noexcept;
     private:
         std::u32string m_orig;
         std::u32string m_data;
-        std::shared_ptr<const stdfs::path> m_filename;
+        shared_ptr<const stdfs::path> m_filename;
     };
 }
 

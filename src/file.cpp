@@ -30,7 +30,7 @@
 } */
 
 ::supdef::source_file::source_file(const stdfs::path& filename)
-    : m_orig(), m_data(), m_filename(std::make_shared<const stdfs::path>(filename))
+    : m_orig(), m_data(), m_filename(make_shared<const stdfs::path>(filename))
 {
     int fd = ::open(filename.c_str(), O_RDONLY);
     if (fd == -1)
@@ -73,7 +73,7 @@
 }
 
 ::supdef::source_file::source_file(stdfs::path&& filename)
-    : m_orig(), m_data(), m_filename(std::make_shared<const stdfs::path>(std::move(filename)))
+    : m_orig(), m_data(), m_filename(make_shared<const stdfs::path>(std::move(filename)))
 {
     int fd = ::open(m_filename->c_str(), O_RDONLY);
     if (fd == -1)
@@ -130,7 +130,7 @@ const std::u32string& supdef::source_file::original_data() const noexcept
     return m_orig;
 }
 
-std::shared_ptr<const stdfs::path> supdef::source_file::filename() const noexcept
+shared_ptr<const stdfs::path> supdef::source_file::filename() const noexcept
 {
     return m_filename;
 }

@@ -59,7 +59,7 @@ namespace
     }
 }
 
-supdef::tokenizer::tokenizer(const std::u32string& data, std::shared_ptr<const stdfs::path> filename)
+supdef::tokenizer::tokenizer(const std::u32string& data, shared_ptr<const stdfs::path> filename)
     : m_data(data), m_filename(filename)
 {
 }
@@ -70,7 +70,7 @@ supdef::tokenizer::~tokenizer()
 
 struct state
 {
-    /* const */ std::shared_ptr<const stdfs::path> filename;
+    /* const */ shared_ptr<const stdfs::path> filename;
     /* const */ std::u32string::const_iterator start;
     /* const */ std::u32string::const_iterator end;
     std::u32string::const_iterator next;
@@ -784,7 +784,7 @@ namespace
 }
 
 
-std::generator<supdef::token> supdef::tokenizer::tokenize(std::shared_ptr<const stdfs::path> filename)
+std::generator<supdef::token> supdef::tokenizer::tokenize(shared_ptr<const stdfs::path> filename)
 {
     auto processed_filename = filename ? filename : m_filename;
     if (!processed_filename)
