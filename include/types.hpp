@@ -83,6 +83,14 @@ namespace boostmp  = ::boost::multiprecision;
 
 namespace supdef
 {
+    template <class... Ts>
+    struct overloaded : Ts...
+    {
+        using Ts::operator()...;
+    };
+    template <class... Ts>
+    overloaded(Ts...) -> overloaded<Ts...>;
+
     using bigint = boostmp::mpz_int;
     using bigfloat = boostmp::mpf_float;
     using bigdecimal = boostmp::mpq_rational;

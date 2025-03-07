@@ -155,6 +155,7 @@ namespace
             TOKEN_CASE('<', langle);
             TOKEN_CASE('>', rangle);
             TOKEN_CASE(',', comma);
+            TOKEN_CASE(';', semicolon);
             TOKEN_CASE(':', colon);
             TOKEN_CASE('=', equals);
             TOKEN_CASE('+', plus);
@@ -205,6 +206,7 @@ namespace
     {
         auto col_start  = s.col,
              line_start = s.line;
+#if 0
         if (*s.next == U'\'')
         {
             char32_t buffer[2];
@@ -240,12 +242,19 @@ namespace
         }
 
         if (*s.next == U'"')
+#else
+        if (*s.next == U'"' || *s.next == U'\'')
+#endif
         {
+            supdef::token_kind lit_style = *s.next == U'"' ?
+                supdef::token_kind::string_literal         :
+                supdef::token_kind::char_literal;
             size_t count = 0;
             std::u32string buffer;
             s.advance();
+            using namespace std::string_view_literals;
             // TODO: handle unterminated string (and char) literals
-            while (*s.next != U'"')
+            while (*s.next != (lit_style ==  supdef::token_kind::string_literal ? U'"'sv : U'\''sv))
             {
                 if (*s.next == U'\\')
                 {
@@ -271,7 +280,43 @@ namespace
                 },
                 .data = buffer,
                 .keyword = std::nullopt,
-                .kind = supdef::token_kind::string_literal
+                .kind = lit_style
+            };
+            return std::ref(s);
+        }
+
+        if (std::distance(s.next, s.end) >= 4 && std::u32string_view(s.next, 4) == U"true")
+        {
+            s.advance(4);
+            s.tokret = {
+                .loc = {
+                    .filename = s.filename,
+                    .line = line_start,
+                    .column = col_start,
+                    .infile_offset = __CKD_DISTANCE(infile_offset, s.start, s.next) - 4,
+                    .toksize = 4
+                },
+                .data = std::u32string(U"true"),
+                .keyword = std::nullopt,
+                .kind = supdef::token_kind::boolean_literal
+            };
+            return std::ref(s);
+        }
+
+        if (std::distance(s.next, s.end) >= 5 && std::u32string_view(s.next, 5) == U"false")
+        {
+            s.advance(5);
+            s.tokret = {
+                .loc = {
+                    .filename = s.filename,
+                    .line = line_start,
+                    .column = col_start,
+                    .infile_offset = __CKD_DISTANCE(infile_offset, s.start, s.next) - 5,
+                    .toksize = 5
+                },
+                .data = std::u32string(U"false"),
+                .keyword = std::nullopt,
+                .kind = supdef::token_kind::boolean_literal
             };
             return std::ref(s);
         }
@@ -422,7 +467,8 @@ namespace
     supdef, runnable,               \
     begin, end,                     \
                                     \
-    set, unset, pragma, global,     \
+    set, unset, pragma,             \
+    global, defer,                  \
                                     \
     if_, elseif, else_, endif,      \
     for_, endfor,                   \
@@ -446,6 +492,7 @@ namespace
     unset sep()         \
     pragma sep()        \
     global sep()        \
+    defer sep()         \
     if sep()            \
     elseif sep()        \
     else sep()          \

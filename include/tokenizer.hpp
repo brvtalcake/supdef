@@ -23,6 +23,7 @@ namespace supdef
         hex_integer_literal,    // 0x[0-9a-fA-F]+
         binary_integer_literal, // 0b[01]+
         octal_integer_literal,  // 0[0-7]+
+        boolean_literal,        // true or false
 
         newline,               // \n or equivalent
         horizontal_whitespace, // \h
@@ -35,6 +36,7 @@ namespace supdef
         langle,                // <
         rangle,                // >
         comma,                 // ,
+        semicolon,             // ;
         colon,                 // :
         equals,                // =
         plus,                  // +
@@ -70,7 +72,8 @@ namespace supdef
         supdef, runnable,
         begin, end,
 
-        set, unset, pragma, global,
+        set, unset, pragma,
+        global, defer,
         
         if_, elseif, else_, endif,
         for_, endfor,

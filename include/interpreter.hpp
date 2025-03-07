@@ -180,7 +180,17 @@ namespace supdef
             bool eat_newlines;
         };
 
-        struct runnable_lang_params
+        enum class lang_identifier
+        {
+            c = 1, cpp, rust, d, zig,
+            csharp, fsharp,
+            java,
+            ocaml, racket, haskell,
+            python, shell, perl, ruby
+        };
+        static constexpr size_t _langidentcount = static_cast<size_t>(lang_identifier::ruby);
+
+        struct execinfo
         {
             struct cmdline_source_placeholder { };
             struct cmdline_executable_placeholder { };
@@ -198,28 +208,22 @@ namespace supdef
                 cmdline_joinargs_placeholder,
                 std::u32string>;
 
-            struct execinfo
-            {
-                // the standard / version used / needed
-                std::u32string version;
+            // the standard / version used / needed
+            std::u32string version;
 
-                // the compiler and interpreter used, if needed
-                std::optional<stdfs::path> compiler, interpreter;
+            // the compiler and interpreter used, if needed
+            std::optional<stdfs::path> compiler, interpreter;
 
-                // the options if needed
-                std::vector<cmdline_args_type> compiler_cmdline, execution_cmdline;
-            } exinfo;
+            // the options if needed
+            std::vector<cmdline_args_type> compiler_cmdline, execution_cmdline;
+        };
+
+        struct runnable_lang_params
+        {
+            execinfo exinfo;
 
             // the language used
-            enum class identifier
-            {
-                c = 1, cpp, rust, d, zig,
-                csharp, fsharp,
-                java,
-                ocaml, racket, haskell,
-                python, shell, perl, ruby
-            } ident;
-            static constexpr size_t _langidentcount = static_cast<size_t>(identifier::ruby);
+            lang_identifier ident;
         };
     }
 }

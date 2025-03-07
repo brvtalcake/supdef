@@ -16,35 +16,69 @@
 #include <cmath>
 #include <tgmath.h>
 
+#include <boost/function.hpp>
+#include <boost/functional.hpp>
+#include <boost/function_types/result_type.hpp>
+#include <boost/function_types/function_type.hpp>
+#include <boost/function_types/parameter_types.hpp>
+#include <boost/function_types/function_arity.hpp>
+
 namespace supdef
 {
+    template <typename T>
+    static inline constexpr bool is_valid_type_v = std::is_void_v<std::void_t<T>>;
+
+    template <typename T>
+    static inline constexpr bool has_valid_numlimits_v = is_valid_type_v<std::numeric_limits<T>> &&
+                                                         std::numeric_limits<T>::is_specialized;
+
+    //template <typename T>
+    //concept floating_point = std::floating_point<T> || (has_valid_numlimits_v<T> && !std::numeric_limits<T>::is_integer);
+
+    //template <typename T>
+    //concept integral = std::integral<T> || (has_valid_numlimits_v<T> && std::numeric_limits<T>::is_integer);
+
     namespace unicode
     {
-        template <typename T>
-        static inline T numeric_value(UChar32 c)
+        template <typename T, std::enable_if_t<has_valid_numlimits_v<std::numeric_limits<T>>, bool> Strict = true>
+        static inline std::optional<T> numeric_value(UChar32 c)
         {
+            static_assert(std::same_as<boost::function_types::function_arity<decltype(u_getNumericValue)>, boost::mpl::int_<1>>);
+            static_assert(std::same_as<boost::mpl::at_c<boost::function_types::parameter_types<decltype(u_getNumericValue)>, 0>, UChar32>);
+            static_assert(std::same_as<std::invoke_result_t<decltype(u_getNumericValue), UChar32>, double>);
+
+            double val = u_getNumericValue(c);
+            if (val == U_NO_NUMERIC_VALUE)
+                return std::nullopt;
+
             if constexpr (std::floating_point<T>)
-                return u_getNumericValue(c);
+                return static_cast<T>(val);
             else
             {
-                auto val = u_getNumericValue(c);
-                if (val == U_NO_NUMERIC_VALUE)
-                    return 0;
+                if constexpr (Strict)
+                {
+                    long double lval = val;
+                    long double min = (long double)std::numeric_limits<T>::lowest();
+                    long double max = (long double)std::numeric_limits<T>::max();
+                    if (lval < min || lval > max)
+                        return std::nullopt;
+                }
+
                 if constexpr (std::integral<T>)
                     return static_cast<T>(std::llround(val));
                 else
                     return static_cast<T>(val);
             }
         }
-        template <typename T>
-        static inline T numeric_value(const icu::UnicodeString& str, int32_t index)
+        template <typename T, std::enable_if_t<has_valid_numlimits_v<std::numeric_limits<T>>, bool> Strict = true>
+        static inline std::optional<T> numeric_value(const icu::UnicodeString& str, int32_t index)
         {
-            return numeric_value<T>(str.char32At(index));
+            return numeric_value<T, Strict>(str.char32At(index));
         }
-        template <typename T>
-        static inline T numeric_value(char32_t c)
+        template <typename T, std::enable_if_t<has_valid_numlimits_v<std::numeric_limits<T>>, bool> Strict = true>
+        static inline std::optional<T> numeric_value(char32_t c)
         {
-            return numeric_value<T>(static_cast<UChar32>(c));
+            return numeric_value<T, Strict>(static_cast<UChar32>(c));
         }
     }
     namespace unicode::normalizer
@@ -228,7 +262,7 @@ namespace supdef
         static inline bool is_odigit(UChar32 c)
         {
             return ::supdef::unicode::category::is_digit(c) &&
-                   ::supdef::unicode::numeric_value<uint8_t>(c) < 8;
+                   ::supdef::unicode::numeric_value<uint8_t, true>(c) < 8;
         }
         template <typename T = uint_least32_t>
         static inline bool is_odigit(__ENABLEIF_2(T) c)
@@ -250,7 +284,7 @@ namespace supdef
             bool isa_digit = ::supdef::unicode::category::is_digit(c);
             if (!isa_digit)
                 return false;
-            auto numval = ::supdef::unicode::numeric_value<uint8_t>(c);
+            auto numval = ::supdef::unicode::numeric_value<uint8_t, true>(c);
             return numval < 2;
         }
         template <typename T = uint_least32_t>
