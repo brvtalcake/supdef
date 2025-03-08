@@ -651,6 +651,38 @@ namespace
             return tok.kind == kind;
         }, std::forward<FnT>(fn));
     }
+
+    template <typename IterT, typename PredT>
+        requires points_to_token_and_input<IterT> && predicate<PredT, IterT>
+    static size_t skip_while(IterT& iter, const IterT end, PredT&& pred)
+    {
+        return skip_until(iter, end, std::not_fn(std::forward<PredT>(pred)));
+    }
+
+    template <typename IterT>
+        requires points_to_token_and_input<IterT>
+    static size_t skip_while(IterT& iter, const IterT end, ::supdef::token_kind kind)
+    {
+        return skip_until(iter, end, [kind](const ::supdef::token& tok) {
+            return tok.kind != kind;
+        });
+    }
+
+    template <typename IterT, typename PredT, typename FnT>
+        requires points_to_token_and_input<IterT> && predicate<PredT, IterT> && invokeable<FnT&&, IterT>
+    static size_t skip_while(IterT& iter, const IterT end, PredT&& pred, FnT&& fn)
+    {
+        return skip_until(iter, end, std::not_fn(std::forward<PredT>(pred)), std::forward<FnT>(fn));
+    }
+
+    template <typename IterT, typename FnT>
+        requires points_to_token_and_input<IterT> && invokeable<FnT&&, IterT>
+    static size_t skip_while(IterT& iter, const IterT end, ::supdef::token_kind kind, FnT&& fn)
+    {
+        return skip_until(iter, end, [kind](const ::supdef::token& tok) {
+            return tok.kind != kind;
+        }, std::forward<FnT>(fn));
+    }
 }
 
 #if 0
