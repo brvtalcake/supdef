@@ -91,6 +91,81 @@ namespace supdef
     template <class... Ts>
     overloaded(Ts...) -> overloaded<Ts...>;
 
+    template <typename...>
+    struct select_overload;
+
+    template <typename RetT, typename... ArgsT>
+    struct select_overload<RetT(ArgsT...)>
+    {
+        using type = RetT(*)(ArgsT...);
+
+        constexpr select_overload(type fn) noexcept
+            : fn(fn)
+        {
+        }
+
+        constexpr select_overload& operator=(type fn) noexcept
+        {
+            this->fn = fn;
+            return *this;
+        }
+
+        constexpr operator type() const noexcept
+        {
+            return fn;
+        }
+
+        constexpr type operator()() const noexcept
+        {
+            return fn;
+        }
+
+        type fn;
+    };
+
+    template <typename RetT, typename... ArgsT>
+    struct select_overload<RetT(*)(ArgsT...)>
+        : select_overload<RetT(ArgsT...)>
+    {
+        using select_overload<RetT(ArgsT...)>::select_overload;
+        using select_overload<RetT(ArgsT...)>::operator=;
+    };
+
+    template <typename RetT, typename... ArgsT>
+    struct select_overload<RetT(ArgsT...) noexcept>
+    {
+        using type = RetT(*)(ArgsT...) noexcept;
+
+        constexpr select_overload(type fn) noexcept
+            : fn(fn)
+        {
+        }
+
+        constexpr select_overload& operator=(type fn) noexcept
+        {
+            this->fn = fn;
+            return *this;
+        }
+        
+        constexpr operator type() const noexcept
+        {
+            return fn;
+        }
+
+        constexpr type operator()() const noexcept
+        {
+            return fn;
+        }
+    };
+
+    template <typename RetT, typename... ArgsT>
+    struct select_overload<RetT(*)(ArgsT...) noexcept>
+        : select_overload<RetT(ArgsT...) noexcept>
+    {
+        using select_overload<RetT(ArgsT...) noexcept>::select_overload;
+        using select_overload<RetT(ArgsT...) noexcept>::operator=;
+    };
+
     using bigint = boostmp::mpz_int;
     using bigfloat = boostmp::mpf_float;
     using bigdecimal = boostmp::mpq_rational;
@@ -156,6 +231,9 @@ namespace supdef
         >::value
     );
 
+#undef  FWD_AUTO
+#define FWD_AUTO(...) ::std::forward<std::remove_reference_t<decltype(__VA_ARGS__)>>(__VA_ARGS__)
+
 #if SUPDEF_MULTITHREADED
     template <typename T>
     using shared_ptr = std::shared_ptr<T>;
@@ -179,6 +257,63 @@ namespace supdef
                 )
             );
         }
+
+        template <typename T, typename U>
+        consteval bool ptr_cast_is_noexcept(std::string_view cast)
+        {
+            if constexpr (cast == "static")
+            {
+                return static_cast<bool>(
+                    noexcept(
+#if SUPDEF_MULTITHREADED
+                        std::static_pointer_cast<T>(std::declval<U>())
+#else
+                        boost::static_pointer_cast<T>(std::declval<U>())
+#endif
+                    )
+                );
+            }
+            else if constexpr (cast == "dynamic")
+            {
+                return static_cast<bool>(
+                    noexcept(
+#if SUPDEF_MULTITHREADED
+                        std::dynamic_pointer_cast<T>(std::declval<U>())
+#else
+                        boost::dynamic_pointer_cast<T>(std::declval<U>())
+#endif
+                    )
+                );
+            }
+            else if constexpr (cast == "const")
+            {
+                return static_cast<bool>(
+                    noexcept(
+#if SUPDEF_MULTITHREADED
+                        std::const_pointer_cast<T>(std::declval<U>())
+#else
+                        boost::const_pointer_cast<T>(std::declval<U>())
+#endif
+                    )
+                );
+            }
+            else if constexpr (cast == "reinterpret")
+            {
+                return static_cast<bool>(
+                    noexcept(
+#if SUPDEF_MULTITHREADED
+                        std::reinterpret_pointer_cast<T>(std::declval<U>())
+#else
+                        boost::reinterpret_pointer_cast<T>(std::declval<U>())
+#endif
+                    )
+                );
+            }
+            else
+            {
+                return false;
+            }
+        }
     }
 
     // make_shared
@@ -192,6 +327,58 @@ namespace supdef
         return std::make_shared<T>(std::forward<Args>(args)...);
 #else
         return boost::make_local_shared<T>(std::forward<Args>(args)...);
+#endif
+    }
+
+    template <typename T>
+    static inline ::supdef::shared_ptr<T> static_pointer_cast(
+        auto&& ptr
+    ) noexcept(
+        ::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("static")
+    ) {
+#if SUPDEF_MULTITHREADED
+        return std::static_pointer_cast<T>(FWD_AUTO(ptr));
+#else
+        return boost::static_pointer_cast<T>(FWD_AUTO(ptr));
+#endif
+    }
+
+    template <typename T>
+    static inline ::supdef::shared_ptr<T> dynamic_pointer_cast(
+        auto&& ptr
+    ) noexcept(
+        ::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("dynamic")
+    ) {
+#if SUPDEF_MULTITHREADED
+        return std::dynamic_pointer_cast<T>(FWD_AUTO(ptr));
+#else
+        return boost::dynamic_pointer_cast<T>(FWD_AUTO(ptr));
+#endif
+    }
+
+    template <typename T>
+    static inline ::supdef::shared_ptr<T> const_pointer_cast(
+        auto&& ptr
+    ) noexcept(
+        ::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("const")
+    ) {
+#if SUPDEF_MULTITHREADED
+        return std::const_pointer_cast<T>(FWD_AUTO(ptr));
+#else
+        return boost::const_pointer_cast<T>(FWD_AUTO(ptr));
+#endif
+    }
+
+    template <typename T>
+    static inline ::supdef::shared_ptr<T> reinterpret_pointer_cast(
+        auto&& ptr
+    ) noexcept(
+        ::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("reinterpret")
+    ) {
+#if SUPDEF_MULTITHREADED
+        return std::reinterpret_pointer_cast<T>(FWD_AUTO(ptr));
+#else
+        return boost::reinterpret_pointer_cast<T>(FWD_AUTO(ptr));
 #endif
     }
 }

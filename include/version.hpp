@@ -1,3 +1,5 @@
+#include <version>
+
 #undef  SUPDEF_VERSION_MAJOR
 #define SUPDEF_VERSION_MAJOR 0U
 
@@ -33,4 +35,19 @@
 
 #ifndef SUPDEF_MULTITHREADED
     #define SUPDEF_MULTITHREADED 0
+#endif
+
+#if SUPDEF_MULTITHREADED
+    #include <mutex>
+    #include <shared_mutex>
+    #include <condition_variable>
+    #include <atomic>
+    #include <thread>
+    #include <future>
+    #include <barrier>
+    #include <semaphore>
+    #include <latch>
+    #include <stop_token>
+    #include <jthread>
+    #include <syncstream>
 #endif

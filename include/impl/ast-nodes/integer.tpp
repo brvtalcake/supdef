@@ -24,13 +24,14 @@ namespace supdef::ast
             for (char32_t c : val)
             {
                 // TODO: maybe already checked while tokenizing ?
-                const long long nval = ::supdef::unicode::numeric_value<long long>(c);
-                if ((long long)'0' + nval < (long long)std::numeric_limits<char>::min() ||
-                    (long long)'0' + nval > (long long)std::numeric_limits<char>::max())
+                const auto nval = ::supdef::unicode::numeric_value<long long>(c);
+                if (!nval.has_value() ||
+                    (long long)'0' + *nval < (long long)std::numeric_limits<char>::min() ||
+                    (long long)'0' + *nval > (long long)std::numeric_limits<char>::max())
                     throw std::runtime_error("Invalid character in integer literal");
                 str.push_back((char)((long long)'0' + nval));
             }
-            m_val = ::supdef::bigint(str);
+            m_val = ::supdef::bigint(std::move(str));
         }
 
         const ::supdef::bigint& val() const

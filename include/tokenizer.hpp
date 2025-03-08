@@ -117,6 +117,9 @@ namespace supdef
         std::u32string m_data;
         shared_ptr<const stdfs::path> m_filename;
     };
+
+    std::string description_string(token_kind kind);
+    std::string description_string(keyword_kind kind);
 }
 
 #endif

@@ -10,9 +10,11 @@ private:
     std::u32string m_data;
 }; */
 
+#include <printer.hpp>
 #include <tokenizer.hpp>
 #include <unicode.hpp>
 #include <detail/ckd_arith.hpp>
+#include <impl/parsing-utils.tpp>
 
 #include <simdutf.h>
 
@@ -30,23 +32,7 @@ private:
 
 namespace
 {
-    static std::string format(const std::u32string& str, size_t start = 0, size_t end = std::u32string::npos)
-    {
-        const auto& dataptr = str.data();
-        const auto& datalen = str.size();
-        const auto& datastart = dataptr + start;
-
-        if (end == std::u32string::npos)
-            end = datalen;
-
-        size_t required_length = simdutf::utf8_length_from_utf32(datastart, end - start);
-        std::unique_ptr<char[]> buf(new char[required_length]);
-        size_t result = simdutf::convert_valid_utf32_to_utf8(datastart, end - start, buf.get());
-        if (result == 0)
-            throw std::runtime_error("failed to convert utf32 to utf8");
-
-        return std::string(buf.get(), result);
-    }
+    using ::supdef::printer::format;
 
     static inline std::string format(const std::u32string::const_iterator& start, const std::u32string::const_iterator& end)
     {
@@ -59,7 +45,7 @@ namespace
     }
 }
 
-supdef::tokenizer::tokenizer(const std::u32string& data, shared_ptr<const stdfs::path> filename)
+supdef::tokenizer::tokenizer(const std::u32string& data, ::supdef::shared_ptr<const stdfs::path> filename)
     : m_data(data), m_filename(filename)
 {
 }
@@ -70,7 +56,7 @@ supdef::tokenizer::~tokenizer()
 
 struct state
 {
-    /* const */ shared_ptr<const stdfs::path> filename;
+    /* const */ ::supdef::shared_ptr<const stdfs::path> filename;
     /* const */ std::u32string::const_iterator start;
     /* const */ std::u32string::const_iterator end;
     std::u32string::const_iterator next;
@@ -831,7 +817,7 @@ namespace
 }
 
 
-std::generator<supdef::token> supdef::tokenizer::tokenize(shared_ptr<const stdfs::path> filename)
+std::generator<supdef::token> supdef::tokenizer::tokenize(::supdef::shared_ptr<const stdfs::path> filename)
 {
     auto processed_filename = filename ? filename : m_filename;
     if (!processed_filename)
@@ -867,4 +853,162 @@ std::generator<supdef::token> supdef::tokenizer::tokenize(shared_ptr<const stdfs
     }
 
     co_return;
+}
+
+std::string description_string(::supdef::token_kind kind)
+{
+    std::string basic_desc = translate(
+        magic_enum::enum_name(kind).data(), "_", " "
+    );
+    std::string desc,
+                prefix = "token `",
+                suffix = "`";
+    switch (kind)
+    {
+    case token_kind::eof:
+        desc = "(end of file)";
+        break;
+    case token_kind::horizontal_whitespace:
+        desc = "";
+        break;
+    case token_kind::newline:
+        desc = "";
+        break;
+    case token_kind::inline_comment:
+        desc = "(`//...` comment)";
+        break;
+    case token_kind::multiline_comment:
+        desc = "(`/*...*/` comment)";
+        break;
+    case token_kind::char_literal:
+        desc = "('...')";
+        break;
+    case token_kind::string_literal:
+        desc = "(\"...\")";
+        break;
+    case token_kind::boolean_literal:
+        desc = "(`true` or `false`)";
+        break;
+    case token_kind::integer_literal:
+        desc = "(1234567890...)";
+        break;
+    case token_kind::hex_integer_literal:
+        desc = "(0x1234567890...)";
+        break;
+    case token_kind::octal_integer_literal:
+        desc = "(01234567...)";
+        break;
+    case token_kind::binary_integer_literal:
+        desc = "(0b01010101...)";
+        break;
+    case token_kind::floating_literal:
+        desc = "(123.456e-789...)";
+        break;
+    case token_kind::keyword:
+        desc = "";
+        break;
+    case token_kind::identifier:
+        desc = "";
+        break;
+    case token_kind::backslash:
+        desc = "(`\\`)";
+        break;
+    case token_kind::lparen:
+        desc = "(`(`)";
+        break;
+    case token_kind::rparen:
+        desc = "(`)`)";
+        break;
+    case token_kind::lbrace:
+        desc = "(`{`)";
+        break;
+    case token_kind::rbrace:
+        desc = "(`}`)";
+        break;
+    case token_kind::lbracket:
+        desc = "(`[`)";
+        break;
+    case token_kind::rbracket:
+        desc = "(`]`)";
+        break;
+    case token_kind::langle:
+        desc = "(`<`)";
+        break;
+    case token_kind::rangle:
+        desc = "(`>`)";
+        break;
+    case token_kind::comma:
+        desc = "(`,`)";
+        break;
+    case token_kind::semicolon:
+        desc = "(`;`)";
+        break;
+    case token_kind::colon:
+        desc = "(`:`)";
+        break;
+    case token_kind::equals:
+        desc = "(`=`)";
+        break;
+    case token_kind::plus:
+        desc = "(`+`)";
+        break;
+    case token_kind::minus:
+        desc = "(`-`)";
+        break;
+    case token_kind::asterisk:
+        desc = "(`*`)";
+        break;
+    case token_kind::slash:
+        desc = "(`/`)";
+        break;
+    case token_kind::percent:
+        desc = "(`%`)";
+        break;
+    case token_kind::ampersand:
+        desc = "(`&`)";
+        break;
+    case token_kind::pipe:
+        desc = "(`|`)";
+        break;
+    case token_kind::caret:
+        desc = "(`^`)";
+        break;
+    case token_kind::exclamation:
+        desc = "(`!`)";
+        break;
+    case token_kind::question:
+        desc = "(`?`)";
+        break;
+    case token_kind::dollar:
+        desc = "(`$`)";
+        break;
+    case token_kind::at:
+        desc = "(`@`)";
+        break;
+    case token_kind::tilde:
+        desc = "(`~`)";
+        break;
+    case token_kind::period:
+        desc = "(`.`)";
+        break;
+    case token_kind::hash:
+        desc = "(`#`)";
+        break;
+    case token_kind::other:
+        desc = "";
+        break;
+    default:
+        desc = "(unknown)";
+        break;
+    }
+    if (!desc.empty())
+        suffix += " ";
+    return prefix + basic_desc + suffix + desc; 
+}
+std::string description_string(::supdef::keyword_kind kind)
+{
+    std::string desc = strip(magic_enum::enum_name(kind).data(), "_\t\n\r\v\f");
+    if (desc == "unknown")
+        return "unknown keyword";
+    return "keyword `" + desc + "`";
 }

@@ -1,182 +1,181 @@
 #include <ast.hpp>
 #include <parser.hpp>
 #include <tokenizer.hpp>
-#include <boost/spirit/home/x3.hpp>
-#include <boost/spirit/home/x3/support/context.hpp>
+#include <types.hpp>
+#include <impl/parsing-utils.tpp>
 
-namespace x3 = boost::spirit::x3;
-namespace qi = boost::spirit::qi;
+#include <bits/stdc++.h>
 
-namespace
+supdef::ast::builder::builder(const std::list<::supdef::token>& tokens)
+    : m_tokens(std::addressof(tokens))
 {
-    struct token_parser : x3::parser<token_parser>
+}
+
+supdef::ast::builder::builder(const std::vector<::supdef::token>& tokens)
+    : m_tokens(std::addressof(tokens))
+{
+}
+
+struct tok_info
+{
+    std::optional<supdef::token_kind> tkind = std::nullopt;
+    std::optional<supdef::keyword_kind> kkind = std::nullopt;
+    std::optional<std::u32string> data = std::nullopt;
+    bool from_token = false;
+
+    tok_info(const ::supdef::token& tok)
+        : tkind(tok.kind)
+        , kkind(tok.keyword)
+        , data(tok.data)
+        , from_token(true)
     {
-        using attribute_type = ::supdef::token;
-        static constexpr bool has_attribute = true;
+    }
+    
 
-        constexpr token_parser(::supdef::token_kind kind)
-            : parsed_kind(kind)
-        {
-        }
-
-        constexpr token_parser(::supdef::keyword_kind kind)
-            : parsed_kind(::supdef::token_kind::keyword)
-            , parsed_keyword(kind)
-        {
-        }
-
-        constexpr token_parser(::supdef::token_kind kind, std::u32string data)
-            : parsed_kind(kind)
-            , parsed_data(data)
-        {
-        }
-
-        ::supdef::token_kind parsed_kind;
-        std::optional<::supdef::keyword_kind> parsed_keyword = std::nullopt;
-        std::optional<std::u32string> parsed_data = std::nullopt;
-
-        template <typename Iterator, typename Context, typename RContext, typename Attribute>
-        bool parse(Iterator& first, Iterator const& last, Context const& context, RContext& rcontext, Attribute& attr) const
-        {
-            (void)context;
-            (void)rcontext;
-
-            bool result = true;
-
-            if (first != last)
-            {
-                if (first->kind != parsed_kind)
-                    result = false;
-
-                if (result && parsed_keyword.has_value() &&
-                   (!first->keyword.has_value() || first->keyword.value() != parsed_keyword.value()))
-                    result = false;
-
-                if (result && parsed_data.has_value() &&
-                   (!first->data.has_value() || first->data.value() != parsed_data.value()))
-                    result = false;
-
-                if (result)
-                {
-                    attr = *first;
-                    stdranges::advance(first, 1);
-                    return true;
-                }
-            }
-
-            return false;
-        }
-    };
-
-    struct any_token_parser : x3::parser<any_token_parser>
+    std::string to_string() const
     {
-        using attribute_type = ::supdef::token;
-        static constexpr bool has_attribute = true;
-
-        template <typename Iterator, typename Context, typename RContext, typename Attribute>
-        bool parse(Iterator& first, Iterator const& last, Context const& context, RContext& rcontext, Attribute& attr) const
+        using namespace std::string_literals;
+        if (this->kkind.has_value())
         {
-            (void)context;
-            (void)rcontext;
-
-            if (first != last)
-            {
-                attr = *first;
-                stdranges::advance(first, 1);
-                return true;
-            }
-
-            return false;
+            std::string kwstring = this->data.has_value() && !this->from_token
+                                 ? "keyword `" + ::supdef::printer::format(this->data.value()) + "`"
+                                 : ::supdef::description_string(this->kkind.value());
+            return kwstring;
         }
-    };
+        else if (this->tkind.has_value())
+        {
+            std::string tkstring = this->data.has_value() && !this->from_token
+                                 ? "token `" + ::supdef::printer::format(this->data.value()) + "`"
+                                 : ::supdef::description_string(this->tkind.value());
+            return tkstring;
+        }
+        else if (this->data.has_value())
+            return "`" + ::supdef::printer::format(this->data.value()) + "`";
+        else
+            return "any token";
+    }
+};
 
-    struct any_token_but_parser : x3::parser<any_token_but_parser>
+static inline bool match(
+    const supdef::token& tok,
+    const tok_info& info
+) {
+    if (info.tkind.has_value() && tok.kind != info.tkind.value())
+        return false;
+    if (info.kkind.has_value() && tok.kind != supdef::token_kind::keyword)
+        return false;
+    if (info.data.has_value() && tok.data != info.data.value())
+        return false;
+    return true;
+}
+
+static inline supdef::ast::parse_error mk_parse_error(
+    const tok_info& expected,
+    const supdef::token& got,
+    const supdef::token_loc* loc = nullptr
+) {
+    using namespace std::string_literals;
+    return supdef::ast::parse_error(
+        loc ? *loc : got.loc,
+        "expected "s + expected.to_string() + ", got " +
+                  tok_info(got).to_string() + " instead"
+    );
+}
+
+static inline bool accept_token(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& end,
+    const tok_info& to_match,
+    bool skip_ws = true,
+    size_t min_ws = 1,
+    bool skip_newlines = false
+) {
+    if (it == end)
+        return false;
+    if (skip_ws)
     {
-        using attribute_type = ::supdef::token;
-        static constexpr bool has_attribute = true;
-
-        constexpr any_token_but_parser(::supdef::token_kind kind)
-            : parsed_kind(kind)
-        {
-        }
-
-        constexpr any_token_but_parser(::supdef::keyword_kind kind)
-            : parsed_kind(::supdef::token_kind::keyword)
-            , parsed_keyword(kind)
-        {
-        }
-
-        constexpr any_token_but_parser(::supdef::token_kind kind, std::u32string data)
-            : parsed_kind(kind)
-            , parsed_data(data)
-        {
-        }
-
-        ::supdef::token_kind parsed_kind;
-        std::optional<::supdef::keyword_kind> parsed_keyword = std::nullopt;
-        std::optional<std::u32string> parsed_data = std::nullopt;
-
-        template <typename Iterator, typename Context, typename RContext, typename Attribute>
-        bool parse(Iterator& first, Iterator const& last, Context const& context, RContext& rcontext, Attribute& attr) const
-        {
-            (void)context;
-            (void)rcontext;
-
-            if (first != last)
-            {
-                if (first->kind == parsed_kind)
-                {
-                    if (parsed_keyword.has_value() &&
-                       (first->keyword.has_value() && first->keyword.value() == parsed_keyword.value()))
-                        return false;
-
-                    if (parsed_data.has_value() &&
-                       (first->data.has_value() && first->data.value() == parsed_data.value()))
-                        return false;
-
-                    attr = *first;
-                    stdranges::advance(first, 1);
-                    return true;
-                }
-            }
-
+        size_t skipped = skipws(it, end, skip_newlines);
+        if (skipped < min_ws)
             return false;
+    }
+    return match(*it, to_match);
+}
+
+static inline ::supdef::token expect_token(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& end,
+    const tok_info& to_match,
+    bool skip_ws = true,
+    size_t min_ws = 1,
+    bool skip_newlines = false
+) {
+    using namespace std::string_literals;
+    if (!accept_token(it, end, to_match, skip_ws, min_ws, skip_newlines))
+        throw mk_parse_error(to_match, *it);
+    return *it++;
+}
+
+static std::expected<supdef::ast::shared_node, supdef::ast::parse_error>
+parse_top_level(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end
+) {
+    const auto backtrack_it = it;
+    void* backtrack_from = &&start;
+    try
+    {
+backtrack:
+        it = backtrack_it;
+        goto *backtrack_from;
+start:
+        if (at_start_of_line(it, begin))
+        {
+            skipws(it, end);
+            if (it == end)
+                return nullptr;
+            
         }
-    };
+    }
+    catch (const supdef::ast::parse_error& e)
+    {
+        return std::unexpected(e);
+    }
+    catch (...)
+    {
+        throw;
+    }
+    return nullptr;
+}
 
-    static const auto langid_parser = (
-        any_token_but_parser{::supdef::token_kind::horizontal_whitespace}
-    );
-
-    static const auto pragma_runnable_lang_parser = (
-        token_parser{::supdef::keyword_kind::runnable} >> +token_parser{::supdef::token_kind::horizontal_whitespace} >>
-        langid_parser >> +token_parser{::supdef::token_kind::horizontal_whitespace} >>
-        token_parser{::supdef::token_kind::identifier} >> +token_parser{::supdef::token_kind::horizontal_whitespace} >>
-        +(any_token_parser{} - (token_parser{::supdef::token_kind::newline} | token_parser{::supdef::token_kind::eof}))
-    );
-
-    static const auto pragma_runnable_parser = (
-        token_parser{::supdef::keyword_kind::runnable} >> +token_parser{::supdef::token_kind::horizontal_whitespace} >>
-        token_parser{::supdef::token_kind::identifier} >> +token_parser{::supdef::token_kind::horizontal_whitespace} >>
-        +(any_token_parser{} - (token_parser{::supdef::token_kind::newline} | token_parser{::supdef::token_kind::eof}))
-    );
-
-    static const auto pragma_supdef_parser = (
-        token_parser{::supdef::keyword_kind::supdef} >> +token_parser{::supdef::token_kind::horizontal_whitespace} >>
-        token_parser{::supdef::token_kind::identifier} >> +token_parser{::supdef::token_kind::horizontal_whitespace} >>
-        +(any_token_parser{} - (token_parser{::supdef::token_kind::newline} | token_parser{::supdef::token_kind::eof}))
-    );
-
-    static const auto pragma_other_parser = (
-        token_parser{::supdef::token_kind::identifier} >> +token_parser{::supdef::token_kind::horizontal_whitespace} >>
-        +(any_token_parser{} - (token_parser{::supdef::token_kind::newline} | token_parser{::supdef::token_kind::eof}))
-    );
-
-    static const auto pragma_parser = (
-        *token_parser{::supdef::token_kind::horizontal_whitespace} >> token_parser{::supdef::token_kind::at}       >>
-        *token_parser{::supdef::token_kind::horizontal_whitespace} >> token_parser{::supdef::keyword_kind::pragma} >>
-        +token_parser{::supdef::token_kind::horizontal_whitespace} >> (
-            pragma_runnable_lang_parser | pragma_runnable_parser | pragma_supdef_parser | pragma_other_parser
-        )
-    );
+std::generator<std::expected<supdef::ast::shared_node, supdef::ast::parse_error>>
+supdef::ast::builder::build()
+{
+    if (std::holds_alternative<const std::list<::supdef::token>*>(m_tokens))
+    {
+        typedef std::list<::supdef::token>::const_iterator const_iterator;
+        const_iterator it = std::get<const std::list<::supdef::token>*>(m_tokens)->cbegin();
+        const const_iterator end = std::get<const std::list<::supdef::token>*>(m_tokens)->cend();
+        while (it != end)
+            co_yield parse_top_level(
+                it,
+                std::get<const std::list<::supdef::token>*>(m_tokens)->cbegin(),
+                std::get<const std::list<::supdef::token>*>(m_tokens)->cend()
+            );
+    }
+    else if (std::holds_alternative<const std::vector<::supdef::token>*>(m_tokens))
+    {
+        typedef std::vector<::supdef::token>::const_iterator const_iterator;
+        const_iterator it = std::get<const std::vector<::supdef::token>*>(m_tokens)->cbegin();
+        const const_iterator end = std::get<const std::vector<::supdef::token>*>(m_tokens)->cend();
+        while (it != end)
+            co_yield parse_top_level(
+                it,
+                std::get<const std::vector<::supdef::token>*>(m_tokens)->cbegin(),
+                std::get<const std::vector<::supdef::token>*>(m_tokens)->cend()
+            );
+    }
+    else
+        throw std::runtime_error("invalid variant index");
+    co_return;
 }

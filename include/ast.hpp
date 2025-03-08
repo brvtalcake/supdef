@@ -186,4 +186,47 @@ static_assert(supdef::ast::detail::test::all_node_kinds_have_unique_values());
 
 #include <impl/ast-nodes/text.tpp>
 
+namespace supdef::ast
+{
+    class parse_error
+    {
+    public:
+        parse_error(const ::supdef::token_loc& loc, const std::string& msg)
+            : m_loc(loc), m_msg(msg)
+        {
+        }
+        parse_error(const ::supdef::token_loc& loc, std::string&& msg)
+            : m_loc(loc), m_msg(std::move(msg))
+        {
+        }
+
+        const ::supdef::token_loc& location() const
+        {
+            return m_loc;
+        }
+
+        const std::string& message() const
+        {
+            return m_msg;
+        }
+
+    private:
+        ::supdef::token_loc m_loc;
+        std::string m_msg;
+    };
+
+    class builder
+    {
+    public:
+        builder(const std::list<token>& tokens);
+        builder(const std::vector<token>& tokens);
+        ~builder() = default;
+
+        std::generator<std::expected<shared_node, parse_error>> build();
+
+    private:
+        std::variant<const std::list<token>*, const std::vector<token>*> m_tokens;
+    };
+}
+
 #endif

@@ -4,6 +4,8 @@
 #include <tokenizer.hpp>
 #include <detail/globals.hpp>
 
+#include <impl/parsing-utils.tpp>
+
 GLOBAL_GETTER_DECL(
     std::vector<shared_ptr<const stdfs::path>>,
     already_processed_files
@@ -47,31 +49,6 @@ supdef::parser::~parser()
 {
 }
 
-namespace
-{
-    static std::string format(const std::u32string& str, size_t start = 0, size_t end = std::u32string::npos)
-    {
-        const auto& dataptr = str.data();
-        const auto& datalen = str.size();
-        const auto& datastart = dataptr + start;
-
-        if (end == std::u32string::npos)
-            end = datalen;
-        
-        if (str.empty())
-            return "";
-
-        size_t required_length = simdutf::utf8_length_from_utf32(datastart, end - start);
-        std::unique_ptr<char[]> buf(new char[required_length]);
-        size_t result = simdutf::convert_valid_utf32_to_utf8(datastart, end - start, buf.get());
-        if (result == 0)
-            throw std::runtime_error("failed to convert utf32 to utf8");
-
-        return std::string(buf.get(), result);
-    }
-
-}
-
 // tokenize the file
 void ::supdef::parser::do_stage1()
 {
@@ -97,7 +74,7 @@ void ::supdef::parser::do_stage2()
             {
                 printer::error(
                     "unexpected end of file while parsing backslash character",
-                    *token, orig_data, &format
+                    *token, orig_data, &printer::format
                 );
                 return;
             }
@@ -112,7 +89,7 @@ void ::supdef::parser::do_stage2()
             {
                 printer::warning(
                     "backslash character outside of string or character literal",
-                    *token, orig_data, &format
+                    *token, orig_data, &::supdef::printer::format
                 );
             }
         }
@@ -148,205 +125,6 @@ void ::supdef::parser::do_stage3()
     }
 }
 
-namespace
-{
-    template <typename IterT>
-    concept points_to_token = std::same_as<typename std::iterator_traits<IterT>::value_type, ::supdef::token>;
-
-    template <typename IterT>
-    concept points_to_token_and_bidir = points_to_token<IterT> && std::bidirectional_iterator<IterT>;
-
-    template <typename IterT>
-    concept points_to_token_and_fwd = points_to_token<IterT> && std::forward_iterator<IterT>;
-
-    template <typename IterT>
-    concept points_to_token_and_input = points_to_token<IterT> && std::input_iterator<IterT>;
-
-    template <typename FnT, typename IterT>
-    concept predicate = std::predicate<FnT, ::supdef::token> ||
-                        std::predicate<FnT, IterT>;
-    
-    template <typename FnT, typename IterT>
-    concept invokeable = std::invocable<FnT, ::supdef::token> ||
-                         std::invocable<FnT, IterT>;
-
-    static bool at_start_of_line(const points_to_token_and_bidir auto iter, const points_to_token_and_bidir auto begin)
-    {
-        auto cpy = iter;
-        if (cpy == begin)
-            return true;
-        stdranges::advance(cpy, -1);
-        while (cpy != begin && cpy->kind != ::supdef::token_kind::newline)
-        {
-            if (cpy->kind != ::supdef::token_kind::horizontal_whitespace)
-                return false;
-            stdranges::advance(cpy, -1);
-        }
-        return true;
-    }
-
-    static auto reverse_find(
-        const std::bidirectional_iterator auto begin, const std::bidirectional_iterator auto end,
-        auto&& value
-    )
-    {
-        auto iter = end;
-        while (iter != begin)
-        {
-            stdranges::advance(iter, -1);
-            if (*iter == value)
-                return iter;
-        }
-        return iter;
-    }
-
-    static auto reverse_find_if(
-        const std::bidirectional_iterator auto begin, const std::bidirectional_iterator auto end,
-        auto&& pred
-    )
-    {
-        auto iter = end;
-        while (iter != begin)
-        {
-            stdranges::advance(iter, -1);
-            if (pred(*iter))
-                return iter;
-        }
-        return iter;
-    }
-
-    static auto replace_from_to(
-        auto& destcont, std::input_iterator auto destfirst, std::input_iterator auto destlast,
-        std::input_iterator auto srcfirst, std::input_iterator auto srclast
-    )
-    {
-        destcont.erase(destfirst, destlast);
-        return stdranges::copy(srcfirst, srclast, std::inserter(destcont, destlast));
-    }
-
-    static auto replace_from_to(
-        auto& destcont, std::input_iterator auto destfirst, std::input_iterator auto destlast,
-        stdranges::input_range auto&& srcrange
-    )
-    {
-        destcont.erase(destfirst, destlast);
-        return stdranges::copy(
-            std::forward<std::remove_reference_t<decltype(srcrange)>>(srcrange),
-            std::inserter(destcont, destlast)
-        );
-    }
-
-    static auto replace_from_to(
-        auto& destcont, std::input_iterator auto destfirst, std::input_iterator auto destlast,
-        auto&& srcelem
-    )
-    {
-        destcont.erase(destfirst, destlast);
-        return destcont.insert(
-            destlast,
-            std::forward<std::remove_reference_t<decltype(srcelem)>>(srcelem)
-        );
-    }
-
-    template <typename T>
-    static auto replace_from_to(
-        std::list<T>& destcont, std::input_iterator auto destfirst, std::input_iterator auto destlast,
-        std::list<T>&& srcrange
-    )
-    {
-        destcont.erase(destfirst, destlast);
-        destcont.splice(destlast, std::move(srcrange));
-    }
-
-    static size_t skipws(points_to_token_and_input auto& iter, const points_to_token_and_input auto end, bool skip_newlines = false)
-    {
-        size_t count = 0;
-        while (iter != end &&
-                (iter->kind == ::supdef::token_kind::horizontal_whitespace ||
-                    (skip_newlines && iter->kind == ::supdef::token_kind::newline)))
-        {
-            stdranges::advance(iter, 1);
-            count++;
-        }
-        return count;
-    }
-
-    template <typename IterT, typename PredT>
-        requires points_to_token_and_input<IterT> && predicate<PredT, IterT>
-    static size_t skip_until(IterT& iter, const IterT end, PredT pred)
-    {
-        size_t count = 0;
-        if constexpr (std::invocable<PredT, IterT>)
-        {
-            while (iter != end && !pred(iter))
-            {
-                stdranges::advance(iter, 1);
-                count++;
-            }
-        }
-        else
-        {
-            while (iter != end && !pred(*iter))
-            {
-                stdranges::advance(iter, 1);
-                count++;
-            }
-        }
-        return count;
-    }
-
-    template <typename IterT>
-        requires points_to_token_and_input<IterT>
-    static size_t skip_until(IterT& iter, const IterT end, ::supdef::token_kind kind)
-    {
-        return skip_until(iter, end, [kind](const ::supdef::token& tok) {
-            return tok.kind == kind;
-        });
-    }
-
-    template <typename IterT, typename PredT, typename FnT>
-        requires points_to_token_and_input<IterT> && predicate<PredT, IterT> && invokeable<FnT&&, IterT>
-    static size_t skip_until(IterT& iter, const IterT end, PredT pred, FnT&& fn)
-    {
-        size_t count = 0;
-        FnT fncpy = std::forward<FnT>(fn);
-        if constexpr (std::invocable<PredT, IterT>)
-        {
-            while (iter != end && !pred(iter))
-            {
-                if constexpr (std::invocable<FnT&&, IterT>)
-                    std::invoke(fncpy, iter);
-                else
-                    std::invoke(fncpy, *iter);
-                stdranges::advance(iter, 1);
-                count++;
-            }
-        }
-        else
-        {
-            while (iter != end && !pred(*iter))
-            {
-                if constexpr (std::invocable<FnT&&, IterT>)
-                    std::invoke(fncpy, iter);
-                else
-                    std::invoke(fncpy, *iter);
-                stdranges::advance(iter, 1);
-                count++;
-            }
-        }
-        return count;
-    }
-    
-    template <typename IterT, typename FnT>
-        requires points_to_token_and_input<IterT> && invokeable<FnT&&, IterT>
-    static size_t skip_until(IterT& iter, const IterT end, ::supdef::token_kind kind, FnT&& fn)
-    {
-        return skip_until(iter, end, [kind](const ::supdef::token& tok) {
-            return tok.kind == kind;
-        }, std::forward<FnT>(fn));
-    }
-}
-
 // process imports
 void ::supdef::parser::do_stage4()
 {
@@ -375,7 +153,7 @@ void ::supdef::parser::do_stage4()
         if (skipws(token, m_tokens.cend()) == 0)
             printer::warning(
                 "missing whitespace after import keyword",
-                *token, orig_data, &format
+                *token, orig_data, &::supdef::printer::format
             );
         if (token == m_tokens.cend())
         {
@@ -442,13 +220,13 @@ void ::supdef::parser::do_stage4()
 
 fatal:
     printer::fatal(
-        errmsg, errtok, orig_data, &format
+        errmsg, errtok, orig_data, &::supdef::printer::format
     );
     ::exit(EXIT_FAILURE);
 
 error:
     printer::error(
-        errmsg, errtok, orig_data, &format
+        errmsg, errtok, orig_data, &::supdef::printer::format
     );
 
 end:
@@ -465,6 +243,7 @@ end:
     }
 }
 
+#if 0
 std::optional<
     std::pair<
         ::supdef::parser::registered_supdef::options, std::u32string
@@ -498,7 +277,7 @@ std::optional<
     if (skipped == 0)
         printer::warning(
             "missing whitespace after @supdef keyword",
-            *tok, origdata, &format
+            *tok, origdata, &::supdef::printer::format
         );
     
     if (tok->kind == token_kind::keyword && tok->keyword == keyword_kind::begin)
@@ -516,7 +295,7 @@ std::optional<
         {
             printer::error(
                 "unexpected end of line while parsing @supdef options",
-                *std::prev(tok), origdata, &format
+                *std::prev(tok), origdata, &::supdef::printer::format
             );
             return std::nullopt;
         }
@@ -524,7 +303,7 @@ std::optional<
         {
             printer::error(
                 "missing @supdef begin keyword",
-                *tok, origdata, &format
+                *tok, origdata, &::supdef::printer::format
             );
             return std::nullopt;
         }
@@ -537,20 +316,20 @@ std::optional<
     {
         printer::error(
             "unexpected end of line while parsing @supdef name",
-            *std::prev(tok), origdata, &format
+            *std::prev(tok), origdata, &::supdef::printer::format
         );
         return std::nullopt;
     }
     if (skipped == 0)
         printer::warning(
             "missing whitespace after @supdef begin keyword",
-            *tok, origdata, &format
+            *tok, origdata, &::supdef::printer::format
         );
     if (tok->kind != token_kind::identifier)
     {
         printer::error(
             "expected identifier after @supdef begin keyword",
-            *tok, origdata, &format
+            *tok, origdata, &::supdef::printer::format
         );
         return std::nullopt;
     }
@@ -562,7 +341,7 @@ std::optional<
     {
         printer::warning(
             "unexpected tokens after @supdef begin keyword",
-            *tok, origdata, &format
+            *tok, origdata, &::supdef::printer::format
         );
     }
 
@@ -607,11 +386,12 @@ bool ::supdef::parser::parse_supdef_runnable_end(
     if (tok != line_end)
         printer::warning(
             "unexpected tokens after @end keyword",
-            *tok, origdata, &format
+            *tok, origdata, &::supdef::printer::format
         );
 
     return true;
 }
+#endif
 
 /*
  * supdefs format (optional spaces are omitted):
@@ -628,6 +408,7 @@ bool ::supdef::parser::parse_supdef_runnable_end(
 // retrieve supdefs and runnables
 void ::supdef::parser::do_stage5()
 {
+#if 0
     std::string errmsg;
     ::supdef::token errtok;
     const auto& orig_data = m_file.original_data();
@@ -736,7 +517,7 @@ void ::supdef::parser::do_stage5()
             if (!inserted)
                 printer::warning(
                     "supdef `" + format(sd.name) + "` already defined",
-                    *line_start, orig_data, &format
+                    *line_start, orig_data, &::supdef::printer::format
                 );
 
             continue;
@@ -757,15 +538,17 @@ void ::supdef::parser::do_stage5()
 
 error:
     printer::error(
-        errmsg, errtok, orig_data, &format
+        errmsg, errtok, orig_data, &::supdef::printer::format
     );
     return;
 
 fatal:
     printer::fatal(
-        errmsg, errtok, orig_data, &format
+        errmsg, errtok, orig_data, &::supdef::printer::format
     );
     ::exit(EXIT_FAILURE);
+#else
+#endif
 }
 
 using __pair_t = std::pair<
@@ -1092,32 +875,6 @@ void ::supdef::parser::execute_toplevel()
     }
 }
 
-namespace
-{
-    std::list<::supdef::token> isolate_line(
-        std::list<::supdef::token>& tokens,
-        std::list<::supdef::token>::iterator& pos
-    ) noexcept
-    {
-        std::list<::supdef::token> line;
-        auto line_start = reverse_find_if(
-            pos, tokens.begin(),
-            [](const ::supdef::token& tok) {
-                return tok.kind == ::supdef::token_kind::newline;
-            }
-        );
-        auto line_end = stdranges::find_if(
-            pos, tokens.end(),
-            [](const ::supdef::token& tok) {
-                return tok.kind == ::supdef::token_kind::newline;
-            }
-        );
-        line.splice(line.begin(), tokens, line_start, line_end);
-        pos = line_end;
-        return line;
-    }
-}
-
 std::list<::supdef::token>::iterator supdef::parser::execute_directive(
     std::list<::supdef::token>::iterator tok, const std::list<::supdef::token>::iterator tokcpy
 )
@@ -1136,7 +893,7 @@ std::list<::supdef::token>::iterator supdef::parser::execute_directive(
     {
         printer::warning(
             "expected keyword after @",
-            *tok, m_file.original_data(), &format
+            *tok, m_file.original_data(), &::supdef::printer::format
         );
         return tok;
     }
@@ -1152,7 +909,7 @@ std::list<::supdef::token>::iterator supdef::parser::execute_directive(
         {
             printer::warning(
                 "pragma must be at the start of a line",
-                *tok, m_file.original_data(), &format
+                *tok, m_file.original_data(), &::supdef::printer::format
             );
             return tok;
         }
@@ -1198,7 +955,7 @@ void supdef::parser::execute_pragma(
     {
         printer::warning(
             "expected identifier or keyword after @pragma",
-            *iter, m_file.original_data(), &format
+            *iter, m_file.original_data(), &::supdef::printer::format
         );
         return;
     }
@@ -1214,7 +971,7 @@ void supdef::parser::execute_pragma(
         {
             printer::warning(
                 "expected identifier after @pragma supdef",
-                *iter, m_file.original_data(), &format
+                *iter, m_file.original_data(), &::supdef::printer::format
             );
             return;
         }
@@ -1233,7 +990,7 @@ void supdef::parser::execute_pragma(
         {
             printer::error(
                 "unknown pragma `@pragma supdef " + format(pragma_name) + "` (skiping)",
-                *iter, m_file.original_data(), &format
+                *iter, m_file.original_data(), &::supdef::printer::format
             );
             return;
         }
@@ -1256,7 +1013,7 @@ void supdef::parser::execute_pragma(
             {
                 printer::warning(
                     "expected value after @pragma supdef newline",
-                    *std::prev(iter), m_file.original_data(), &format
+                    *std::prev(iter), m_file.original_data(), &::supdef::printer::format
                 );
                 return;
             }
@@ -1265,7 +1022,7 @@ void supdef::parser::execute_pragma(
             {
                 printer::warning(
                     "expected boolean value after @pragma supdef newline",
-                    *iter, m_file.original_data(), &format
+                    *iter, m_file.original_data(), &::supdef::printer::format
                 );
                 return;
             }
@@ -1297,7 +1054,7 @@ void supdef::parser::execute_pragma(
         {
             printer::warning(
                 "expected identifier after @pragma runnable",
-                *iter, m_file.original_data(), &format
+                *iter, m_file.original_data(), &::supdef::printer::format
             );
             return;
         }
@@ -1356,8 +1113,8 @@ std::list<::supdef::token>::iterator supdef::parser::execute_variable_substituti
         if (!gotit)
         {
             printer::warning(
-                "undefined variable `" + format(tok->data.value()) + "`",
-                *tok, m_file.original_data(), &format
+                "undefined variable `" + ::supdef::printer::format(tok->data.value()) + "`",
+                *tok, m_file.original_data(), &::supdef::printer::format
             );
             return tok;
         }
@@ -1380,7 +1137,7 @@ std::list<::supdef::token>::iterator supdef::parser::execute_variable_substituti
                 printer::fatal(
                     "invalid argument number `" + format(tok->data.value()) + "`" +
                     " (got exception: " + e.what() + ")",
-                    *tok, m_file.original_data(), &format
+                    *tok, m_file.original_data(), &::supdef::printer::format
                 );
                 ::exit(EXIT_FAILURE);
             }
@@ -1388,7 +1145,7 @@ std::list<::supdef::token>::iterator supdef::parser::execute_variable_substituti
             {
                 printer::warning(
                     "argument number `" + format(tok->data.value()) + "` out of range",
-                    *tok, m_file.original_data(), &format
+                    *tok, m_file.original_data(), &::supdef::printer::format
                 );
                 // erase the from `tokcpy` to `std::next(tok)`
                 return m_tokens.erase(tokcpy, std::next(tok));
@@ -1456,7 +1213,7 @@ bool ::supdef::parser::add_child_parser(const stdfs::path& filename, ::supdef::t
         if (!inserted)
             printer::warning(
                 "file `" + filename.string() + "` already imported",
-                *m_tokens.begin(), m_file.original_data(), &format
+                *m_tokens.begin(), m_file.original_data(), &::supdef::printer::format
             );
         return true;
     }
@@ -1472,7 +1229,7 @@ bool ::supdef::parser::add_child_parser(const stdfs::path& filename, ::supdef::t
             if (!inserted)
                 printer::warning(
                     "file `" + (import_from / filename).string() + "` already imported",
-                    *m_tokens.begin(), m_file.original_data(), &format
+                    *m_tokens.begin(), m_file.original_data(), &::supdef::printer::format
                 );
             return true;
         }
@@ -1486,7 +1243,7 @@ bool ::supdef::parser::add_child_parser(const stdfs::path& filename, ::supdef::t
             if (!inserted)
                 printer::warning(
                     "file `" + (imppath / filename).string() + "` already imported",
-                    *m_tokens.begin(), m_file.original_data(), &format
+                    *m_tokens.begin(), m_file.original_data(), &::supdef::printer::format
                 );
             return true;
         }
