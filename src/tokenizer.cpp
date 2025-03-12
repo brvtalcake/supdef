@@ -18,6 +18,8 @@ private:
 
 #include <simdutf.h>
 
+#include <magic_enum.hpp>
+
 #include <boost/preprocessor.hpp>
 
 #undef  __CKD_DISTANCE
@@ -240,7 +242,10 @@ namespace
             s.advance();
             using namespace std::string_view_literals;
             // TODO: handle unterminated string (and char) literals
-            while (*s.next != (lit_style ==  supdef::token_kind::string_literal ? U'"'sv : U'\''sv))
+            while (*s.next != 
+                        (lit_style == supdef::token_kind::string_literal ?
+                                                                    U'"' :
+                                                                    U'\''))
             {
                 if (*s.next == U'\\')
                 {
@@ -271,7 +276,7 @@ namespace
             return std::ref(s);
         }
 
-        if (std::distance(s.next, s.end) >= 4 && std::u32string_view(s.next, 4) == U"true")
+        if (std::distance(s.next, s.end) >= 4 && std::u32string_view{s.next, s.next + 4} == U"true")
         {
             s.advance(4);
             s.tokret = {
@@ -289,7 +294,7 @@ namespace
             return std::ref(s);
         }
 
-        if (std::distance(s.next, s.end) >= 5 && std::u32string_view(s.next, 5) == U"false")
+        if (std::distance(s.next, s.end) >= 5 && std::u32string_view{s.next, s.next + 5} == U"false")
         {
             s.advance(5);
             s.tokret = {
@@ -855,7 +860,7 @@ std::generator<supdef::token> supdef::tokenizer::tokenize(::supdef::shared_ptr<c
     co_return;
 }
 
-std::string description_string(::supdef::token_kind kind)
+std::string supdef::description_string(::supdef::token_kind kind)
 {
     std::string basic_desc = translate(
         magic_enum::enum_name(kind).data(), "_", " "
@@ -1005,7 +1010,7 @@ std::string description_string(::supdef::token_kind kind)
         suffix += " ";
     return prefix + basic_desc + suffix + desc; 
 }
-std::string description_string(::supdef::keyword_kind kind)
+std::string supdef::description_string(::supdef::keyword_kind kind)
 {
     std::string desc = strip(magic_enum::enum_name(kind).data(), "_\t\n\r\v\f");
     if (desc == "unknown")

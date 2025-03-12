@@ -8,7 +8,7 @@
 #include <file.hpp>
 #include <unicode.hpp>
 #include <tokenizer.hpp>
-#include <ast.hpp>
+#include <ast-fwd.hpp>
 #include <detail/xxhash.hpp>
 
 #include <bits/stdc++.h>
@@ -28,6 +28,25 @@
 
 namespace supdef
 {
+    class parser;
+
+    struct parser_compare
+    {
+        using ret_type = decltype(std::declval<stdfs::path>() <=> std::declval<stdfs::path>());
+
+        enum class op
+        {
+            less,
+            greater,
+            equal
+        };
+    protected:
+        static bool do_less(const stdfs::path& lhs, const stdfs::path& rhs);
+
+    public:
+        static bool operator()(const parser& lhs, const parser& rhs, op op = op::less);
+    };
+
     class parser
     {
         friend struct parser_compare;
@@ -58,6 +77,7 @@ namespace supdef
         [[__nodiscard__]]
         bool add_child_parser(const stdfs::path& filename, token_kind pathtype) noexcept;
 
+#if 0
         static std::optional<std::pair<registered_supdef::options, std::u32string>>
         parse_supdef_start(
             std::list<token>::const_iterator line_start,
@@ -73,6 +93,7 @@ namespace supdef
             std::list<token>::const_iterator line_end,
             const std::u32string &origdata
         );
+#endif
 
         static bool
         parse_supdef_runnable_end(
@@ -140,8 +161,8 @@ namespace supdef
         }
     
     private:
-        using supdef_map_type   = umap<std::u32string, ast::supdef_node>;
-        using runnable_map_type = umap<std::u32string, ast::runnable_node>;
+        using supdef_map_type   = umap<std::u32string, shared_ptr<supdef::ast::supdef_node>>;
+        using runnable_map_type = umap<std::u32string, shared_ptr<supdef::ast::runnable_node>>;
         /* stack<substitution_context> m_ctx; */
         source_file m_file;
         std::list<token> m_tokens;
@@ -150,32 +171,20 @@ namespace supdef
         runnable_map_type m_runnables;
     };
 
-    struct parser_compare
-    {
-        using ret_type = decltype(std::declval<stdfs::path>() <=> std::declval<stdfs::path>());
-
-        enum class op
-        {
-            less,
-            greater,
-            equal
-        };
-    protected:
-        static bool do_less(const stdfs::path& lhs, const stdfs::path& rhs)
-        {
-            return lhs < rhs;
-        }
-
-    public:
-        static bool operator()(const parser& lhs, const parser& rhs, op op = op::less)
-        {
-            if (op == op::less)
-                return do_less(*lhs.m_file.filename(), *rhs.m_file.filename());
-            std::unreachable(); // not implemented
-        }
-    };
+    
+}
+bool supdef::parser_compare::do_less(const stdfs::path& lhs, const stdfs::path& rhs)
+{
+    return lhs < rhs;
 }
 
-#include <impl/parser.tpp>
+bool supdef::parser_compare::operator()(
+    const supdef::parser& lhs, const supdef::parser& rhs,
+    supdef::parser_compare::op op
+) {
+    if (op == supdef::parser_compare::op::less)
+        return supdef::parser_compare::do_less(*lhs.m_file.filename(), *rhs.m_file.filename());
+    std::unreachable(); // not implemented
+}
 
 #endif

@@ -18,7 +18,7 @@ namespace supdef::ast
             shared_node&& iterable,
             std::vector<shared_node>&& repl
         )   : node(std::move(loc))
-            , block_node(std::move(repl))
+            , block_node(std::vector( { std::move(repl) } ))
             , m_vars{ std::move(indexname), std::move(elemname) }
             , m_iterable(std::move(iterable))
         {
@@ -32,7 +32,7 @@ namespace supdef::ast
         {
             return m_vars.elem;
         }
-        const vars& vars() const
+        const vars& variables() const
         {
             return m_vars;
         }
@@ -40,6 +40,11 @@ namespace supdef::ast
         const shared_node& iterable() const
         {
             return m_iterable;
+        }
+
+        const std::vector<shared_node>& body() const
+        {
+            return this->replacement();
         }
 
         virtual kind node_kind() const override

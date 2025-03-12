@@ -13,15 +13,11 @@
 #include <type_traits>
 #include <utility>
 #include <concepts>
+#include <optional>
+#include <limits>
+#include <locale>
 #include <cmath>
 #include <tgmath.h>
-
-#include <boost/function.hpp>
-#include <boost/functional.hpp>
-#include <boost/function_types/result_type.hpp>
-#include <boost/function_types/function_type.hpp>
-#include <boost/function_types/parameter_types.hpp>
-#include <boost/function_types/function_arity.hpp>
 
 namespace supdef
 {
@@ -32,20 +28,20 @@ namespace supdef
     static inline constexpr bool has_valid_numlimits_v = is_valid_type_v<std::numeric_limits<T>> &&
                                                          std::numeric_limits<T>::is_specialized;
 
-    //template <typename T>
-    //concept floating_point = std::floating_point<T> || (has_valid_numlimits_v<T> && !std::numeric_limits<T>::is_integer);
-
-    //template <typename T>
-    //concept integral = std::integral<T> || (has_valid_numlimits_v<T> && std::numeric_limits<T>::is_integer);
-
     namespace unicode
     {
-        template <typename T, std::enable_if_t<has_valid_numlimits_v<std::numeric_limits<T>>, bool> Strict = true>
+        template <typename T, std::enable_if_t<has_valid_numlimits_v<T>, bool> Strict = true>
         static inline std::optional<T> numeric_value(UChar32 c)
         {
-            static_assert(std::same_as<boost::function_types::function_arity<decltype(u_getNumericValue)>, boost::mpl::int_<1>>);
-            static_assert(std::same_as<boost::mpl::at_c<boost::function_types::parameter_types<decltype(u_getNumericValue)>, 0>, UChar32>);
-            static_assert(std::same_as<std::invoke_result_t<decltype(u_getNumericValue), UChar32>, double>);
+            static_assert(
+                boost::function_types::function_arity<decltype(u_getNumericValue)>::value == 1
+            );
+            static_assert(
+                std::same_as<boost::mpl::at_c<boost::function_types::parameter_types<decltype(u_getNumericValue)>, 0>::type, UChar32>
+            );
+            static_assert(
+                std::same_as<std::invoke_result_t<decltype(u_getNumericValue), UChar32>, double>
+            );
 
             double val = u_getNumericValue(c);
             if (val == U_NO_NUMERIC_VALUE)
@@ -70,12 +66,12 @@ namespace supdef
                     return static_cast<T>(val);
             }
         }
-        template <typename T, std::enable_if_t<has_valid_numlimits_v<std::numeric_limits<T>>, bool> Strict = true>
+        template <typename T, std::enable_if_t<has_valid_numlimits_v<T>, bool> Strict = true>
         static inline std::optional<T> numeric_value(const icu::UnicodeString& str, int32_t index)
         {
             return numeric_value<T, Strict>(str.char32At(index));
         }
-        template <typename T, std::enable_if_t<has_valid_numlimits_v<std::numeric_limits<T>>, bool> Strict = true>
+        template <typename T, std::enable_if_t<has_valid_numlimits_v<T>, bool> Strict = true>
         static inline std::optional<T> numeric_value(char32_t c)
         {
             return numeric_value<T, Strict>(static_cast<UChar32>(c));

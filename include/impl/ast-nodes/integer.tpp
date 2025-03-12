@@ -29,7 +29,7 @@ namespace supdef::ast
                     (long long)'0' + *nval < (long long)std::numeric_limits<char>::min() ||
                     (long long)'0' + *nval > (long long)std::numeric_limits<char>::max())
                     throw std::runtime_error("Invalid character in integer literal");
-                str.push_back((char)((long long)'0' + nval));
+                str.push_back((char)((long long)'0' + *nval));
             }
             m_val = ::supdef::bigint(std::move(str));
         }

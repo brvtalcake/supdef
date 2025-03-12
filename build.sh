@@ -76,18 +76,27 @@ function mk_tmp_jobfile()
     printf '%s' "$_jobfile"
 }
 
-files="$(find -L src -name '*.cpp' -o -name '*.cc' | xargs)"
+ARGS="$@"
+if [ -z "$ARGS" ]; then
+    files="$(find -L src -name '*.cpp' -o -name '*.cc' | xargs)"
+    produce_executable=1
+else
+    files="$ARGS"
+    produce_executable=0
+fi
 #objfiles="$(map strip_first_dir_if_starts_with src/ $(find -L src -name '*.cpp' -o -name '*.cc' | xargs))"
 
 jobfile="$(mk_tmp_jobfile)"
 trap "rm -f $jobfile" EXIT
 
+common_cflags="-fconcepts-diagnostics-depth=5 -fdiagnostics-color=always -pipe -std=gnu++23 -Wall -Wextra -march=native -mtune=native -flto -Wno-unused-function -Wno-comment -Wno-unused-local-typedefs"
+
 define LIBS "icu-io" "libgrapheme" "simdutf" "gmp" "mpfr"
 define CPPFLAGS "-Iinclude -D_GNU_SOURCE=1 -DSTATIC_INITIALIZER_ALLOCATION=1 -DBOOST_PP_LIMIT_MAG=1024 -DBOOST_PP_LIMIT_FOR=1024 -DBOOST_PP_LIMIT_REPEAT=1024 -DBOOST_PP_LIMIT_ITERATION=1024"
 if [ -z "$OPTIMIZE" ] || [ "$OPTIMIZE" -eq 0 ]; then
-    define CFLAGS "$(expand_libs cflags) -fconcepts-diagnostics-depth=5 -fdiagnostics-color=always -pipe -std=gnu++23 -Wall -Wextra -Og -ggdb3 -march=native -mtune=native -flto"
+    define CFLAGS "$(expand_libs cflags) $common_cflags -Og -ggdb3"
 else
-    define CFLAGS "$(expand_libs cflags) -fdiagnostics-color=always -pipe -std=gnu++23 -Wall -Wextra -O3 -march=native -mtune=native -flto"
+    define CFLAGS "$(expand_libs cflags) $common_cflags -O3"
 fi
 define LDFLAGS "$(expand_libs libs) -L/usr/local/lib -lgrapheme -lboost_filesystem -lboost_unit_test_framework"
 
@@ -100,5 +109,8 @@ done
 
 cmd parallel --joblog parallel.log -j`nproc` < $jobfile
 
-cmd g++ $CFLAGS $(find -L obj -name '*.o') -o main $LDFLAGS
+if [ "$produce_executable" -eq 1 ]; then
+    cmd g++ $CFLAGS $(find -L obj -name '*.o') -o main $LDFLAGS
+fi
+
 #/usr/bin/g++ /usr/local/lib/libgrapheme.a $(find -L obj -name '*.o') -o main

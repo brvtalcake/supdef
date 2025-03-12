@@ -8,243 +8,315 @@
 
 namespace supdef
 {
+    namespace detail
+    {
+        PACKED_STRUCT(mem_hdr)
+        {
+            uintptr_t xord_prev_next; // previous and next headers
+            size_t before : 16;       // quantity to substract from the header's address to get the start of the managed block
+            size_t after  : 47;       // quantity to add to the header's address to get the end of the managed block
+            bool is_allocated : 1;    // whether the block is allocated or not
+
+            static constexpr size_t max_alignment = (1 << 17) - 1;
+            static constexpr size_t max_size = (1 << 47) - 1;
+
+            constexpr std::byte* prev(std::byte* next) const noexcept
+            {
+                return reinterpret_cast<std::byte*>(this->xord_prev_next ^ reinterpret_cast<uintptr_t>(next));
+            }
+            constexpr std::byte* next(std::byte* prev) const noexcept
+            {
+                return reinterpret_cast<std::byte*>(this->xord_prev_next ^ reinterpret_cast<uintptr_t>(prev));
+            }
+
+            constexpr void set_neighbours(std::byte* prev, std::byte* next) noexcept
+            {
+                this->xord_prev_next = reinterpret_cast<uintptr_t>(prev) ^ reinterpret_cast<uintptr_t>(next);
+            }
+
+            constexpr size_t size() const noexcept
+            {
+                return this->before + this->after;
+            }
+            constexpr size_t user_size() const noexcept
+            {
+                return this->after;
+            }
+
+            constexpr void mark_allocated() noexcept
+            {
+                this->is_allocated = true;
+            }
+            constexpr void mark_unallocated() noexcept
+            {
+                this->is_allocated = false;
+            }
+            constexpr void toggle_allocated() noexcept
+            {
+                this->is_allocated = !this->is_allocated;
+            }
+
+            constexpr std::tuple<std::byte*, std::byte*> block(std::byte* self_addr) const noexcept
+            {
+                return std::make_tuple(
+                    self_addr - this->before,
+                    self_addr + sizeof(mem_hdr) + this->after
+                );
+            }
+            constexpr void block(std::byte* self_addr, std::byte* block_start, std::byte* block_end) noexcept
+            {
+                this->before = self_addr - block_start;
+                this->after = block_end - self_addr - sizeof(mem_hdr);
+            }
+
+            constexpr std::tuple<std::byte*, std::byte*> user(std::byte* self_addr) const noexcept
+            {
+                return std::make_tuple(
+                    self_addr + sizeof(mem_hdr),
+                    self_addr + sizeof(mem_hdr) + this->after
+                );
+            }
+
+            static constexpr mem_hdr at(std::byte* ptr) noexcept;
+            static constexpr void at(std::byte* ptr, const mem_hdr& hdr) noexcept;
+
+            static constexpr mem_hdr at(uintptr_t ptr) noexcept;
+            static constexpr void at(uintptr_t ptr, const mem_hdr& hdr) noexcept;
+
+            /*
+            * Free space before the header (but inside the same block)
+            * may be needed if the user requested alignment is so big that
+            * there needs to be some padding between the header and user data.
+            * Since we still want the header to be JUST BEFORE user data,
+            * we need to potentially let free space before it.
+            */
+        };
+        static_assert(std::is_trivially_copyable_v<mem_hdr>);
+        static_assert(std::is_standard_layout_v<mem_hdr>);
+        static_assert(sizeof(mem_hdr) == 2 * 8);
+
+        class arena_base
+        {
+        protected:
+            struct block_info
+            {
+                mem_hdr hdr;
+                std::byte* hdr_addr;
+            };
+
+            static inline constexpr bool is_power_of_two(size_t n) noexcept
+            {
+                return std::has_single_bit(n);
+            }
+
+            static inline constexpr uint8_t log2(size_t n) noexcept
+            {
+                return std::countr_zero(n);
+            }
+
+            static inline constexpr uintptr_t align_up(uintptr_t ptr, size_t align) noexcept
+            {
+                return (ptr + (align - 1)) & ~(align - 1);
+            }
+            static inline constexpr std::byte* align_up(std::byte* ptr, size_t align) noexcept
+            {
+                return reinterpret_cast<std::byte*>(align_up(reinterpret_cast<uintptr_t>(ptr), align));
+            }
+
+            static inline constexpr uintptr_t to_header(uintptr_t start) noexcept
+            {
+                return start - sizeof(mem_hdr);
+            }
+
+            static inline constexpr uintptr_t to_data(uintptr_t start) noexcept
+            {
+                return start + sizeof(mem_hdr);
+            }
+
+            static inline constexpr std::optional<std::tuple<std::byte*, std::byte*>>
+            find_suitable(const block_info& h, size_t bytes, size_t alignment) noexcept
+            {
+                auto [block_start, block_end] = h.hdr.block(h.hdr_addr);
+                auto user_start = align_up(block_start + sizeof(mem_hdr), alignment);
+                if (user_start + bytes <= block_end)
+                    return std::make_tuple(user_start, user_start + bytes);
+                return std::nullopt;
+            }
+        };
+
+        template <size_t N>
+            requires (N > 2 * sizeof(mem_hdr)) && (N <= mem_hdr::max_size)
+        class arena_impl
+            : public arena_base
+        {
+            static constexpr std::optional<std::tuple<std::byte*, std::byte*>>
+            can_contain(const block_info& h, size_t bytes, size_t alignment) noexcept
+            {
+                if (h.hdr.is_allocated)
+                    return std::nullopt;
+
+                return find_suitable(h, bytes, alignment);
+            }
+
+            static constexpr inline bool can_split(std::byte* user_end, std::byte* block_end) noexcept
+            {
+                return user_end + sizeof(mem_hdr) < block_end;
+            }
+
+            // allocated the block, and then if possible splits it in two
+            void* do_alloc(std::byte* prev_addr, const block_info& b, std::tuple<std::byte*, std::byte*> user) noexcept
+            {
+                const auto old_blk_bounds = b.hdr.block(b.hdr_addr);
+                const bool needs_split = can_split(std::get<1>(user), std::get<1>(old_blk_bounds));
+
+                block_info new_block;
+                new_block.hdr_addr = std::get<0>(user) - sizeof(mem_hdr);
+                new_block.hdr = b.hdr;
+                new_block.hdr.block(
+                    new_block.hdr_addr,
+                    std::get<0>(old_blk_bounds),
+                    needs_split ? std::get<1>(user)
+                                : std::get<1>(old_blk_bounds)
+                );
+                new_block.hdr.mark_allocated();
+
+                if (needs_split)
+                {
+                    block_info next_block;
+                    next_block.hdr_addr = std::get<1>(user);
+                    new_block.hdr.set_neighbours(prev_addr, std::get<1>(user));
+
+                    next_block.hdr.set_neighbours(new_block.hdr_addr, b.hdr.next(b.hdr_addr));
+                    next_block.hdr.block(
+                        next_block.hdr_addr,
+                        std::get<1>(user),
+                        std::get<1>(old_blk_bounds)
+                    );
+                    next_block.hdr.mark_unallocated();
+
+                    mem_hdr old_next_hdr = mem_hdr::at(b.hdr.next(b.hdr_addr));
+                    std::byte* old_next_hdr_old_next = old_next_hdr.next(b.hdr_addr);
+                    old_next_hdr.set_neighbours(new_block.hdr_addr, old_next_hdr_old_next);
+                    mem_hdr::at(b.hdr.next(b.hdr_addr), old_next_hdr);
+
+                    mem_hdr::at(new_block.hdr_addr, new_block.hdr);
+                    mem_hdr::at(next_block.hdr_addr, next_block.hdr);
+
+                    return std::get<0>(user);
+                }
+                else
+                {
+                    mem_hdr::at(new_block.hdr_addr, new_block.hdr);
+
+                    return std::get<0>(user);
+                }
+            }
+
+        protected:
+            arena_impl()
+                : m_data()
+                , m_search_from(reinterpret_cast<uintptr_t>(m_data + sizeof(mem_hdr)))
+                , m_prev_search_from(reinterpret_cast<uintptr_t>(m_data))
+            {
+                std::byte* prev;
+                std::byte* next;
+
+                mem_hdr first;
+                mem_hdr middle;
+                mem_hdr last;
+
+                prev = nullptr;
+                next = m_data + sizeof(mem_hdr);
+                first.set_neighbours(prev, next);
+                first.block(m_data, m_data, m_data + N);
+                first.mark_allocated();
+
+                prev = m_data;
+                next = m_data + N - sizeof(mem_hdr);
+                middle.set_neighbours(prev, next);
+                middle.block(m_data + sizeof(mem_hdr), m_data + sizeof(mem_hdr), m_data + N - sizeof(mem_hdr));
+                middle.mark_unallocated();
+
+                prev = m_data + N - 2 * sizeof(mem_hdr);
+                next = nullptr;
+                last.set_neighbours(prev, next);
+                last.block(m_data + N - sizeof(mem_hdr), m_data + N - sizeof(mem_hdr), m_data + N);
+                last.mark_allocated();
+
+                mem_hdr::at(m_data, hdr);
+                mem_hdr::at(m_data + sizeof(mem_hdr), middle);
+                mem_hdr::at(m_data + N - sizeof(mem_hdr), last);
+            }
+
+            ~arena_impl() = default;
+
+            void* alloc_aligned(size_t bytes, size_t alignment = __STDCPP_DEFAULT_NEW_ALIGNMENT__)
+            {
+                if (!is_power_of_two(alignment))
+                    throw std::invalid_argument("alignment is not a power of two");
+
+#if SUPDEF_MULTITHREADED
+                std::lock_guard lock(m_mutex);
+#endif
+                std::byte* addr = reinterpret_cast<std::byte*>(m_search_from);
+                std::byte* prev_addr = reinterpret_cast<std::byte*>(m_prev_search_from);
+                while (addr)
+                {
+                    block_info b;
+                    b.hdr = mem_hdr::at(addr);
+                    b.hdr_addr = addr;
+                    auto can_contain_res = can_contain(b, bytes, alignment);
+                    if (can_contain_res)
+                        return this->do_alloc(prev_addr, b, *can_contain_res);
+                    next_header(prev_addr, addr);
+                }
+
+                return nullptr;
+            }
+        private:
+            ATTRIBUTE_UNINITIALIZED
+                alignas(std::max_align_t)
+                    std::byte m_data[N];
+            uintptr_t m_search_from;
+            uintptr_t m_prev_search_from;
+#if SUPDEF_MULTITHREADED
+            std::recursive_mutex m_mutex;
+#endif
+        };
+    }
     // TODO: finish and test this
     template <size_t N>
     class arena
         : public std::pmr::memory_resource
     {
-        struct mem_hdr
-        {
-            std::byte* prev, next; // previous and next block
-            size_t before,   // free in-block space before header
-                   after;    // free (or taken by user data) in-block space after header
-
-            /*
-             * Free space before the header (but inside the same block)
-             * may be needed if the user requested alignment is so big that
-             * there needs to be some padding between the header and user data.
-             * Since we still want the header to be JUST BEFORE user data,
-             * we need to potentially let free space before it.
-             */
-        };
-
-        static constexpr void toggle_allocated(size_t& size) noexcept
-        {
-            size ^= ((size_t)1 << (sizeof(size_t) * CHAR_BIT - 1));
-        }
-        static constexpr void toggle_allocated(mem_hdr& hdr) noexcept
-        {
-            toggle_allocated(hdr.before);
-        }
-
-        static constexpr void mark_allocated(size_t& size) noexcept
-        {
-            size |= ((size_t)1 << (sizeof(size_t) * CHAR_BIT - 1));
-        }
-        static constexpr void mark_allocated(mem_hdr& hdr) noexcept
-        {
-            mark_allocated(hdr.before);
-        }
-
-        static constexpr void mark_unallocated(size_t& size) noexcept
-        {
-            size &= ~((size_t)1 << (sizeof(size_t) * CHAR_BIT - 1));
-        }
-        static constexpr void mark_unallocated(mem_hdr& hdr) noexcept
-        {
-            mark_unallocated(hdr.before);
-        }
-
-        static constexpr bool is_allocated(size_t size) noexcept
-        {
-            return size & ((size_t)1 << (sizeof(size_t) * CHAR_BIT - 1));
-        }
-        static constexpr bool is_allocated(mem_hdr hdr) noexcept
-        {
-            return is_allocated(hdr.before);
-        }
-
-        static constexpr size_t size(size_t before, size_t after) noexcept
-        {
-            size_t _before = before;
-            mark_unallocated(_before);
-            return _before + after;
-        }
-        static constexpr size_t size(mem_hdr hdr) noexcept
-        {
-            return size(hdr.before, hdr.after);
-        }
-
-        static constexpr bool is_power_of_two(size_t n) noexcept
-        {
-            return std::has_single_bit(n);
-        }
-
-        static constexpr uint8_t log2(size_t n) noexcept
-        {
-            return std::countr_zero(n);
-        }
-
-        static constexpr uintptr_t align_up(uintptr_t ptr, size_t align) noexcept
-        {
-            return (ptr + (align - 1)) & ~(align - 1);
-        }
-
-        static constexpr uintptr_t to_header(uintptr_t start) noexcept
-        {
-            return start - sizeof(mem_hdr);
-        }
-
-        static constexpr uintptr_t to_data(uintptr_t start) noexcept
-        {
-            return start + sizeof(mem_hdr);
-        }
-
-        static mem_hdr header_at(std::byte* ptr) const noexcept
-        {
-            mem_hdr hdr;
-            ::memcpy(&hdr, ptr, sizeof(mem_hdr));
-            return hdr;
-        }
-
-        static void header_at(std::byte* ptr, const mem_hdr& hdr) noexcept
-        {
-            ::memcpy(ptr, &hdr, sizeof(mem_hdr));
-        }
-
-        static constexpr std::optional<std::tuple<std::byte*, std::byte*, std::byte*, mem_hdr, std::optional<mem_hdr>>>
-        can_contain(std::byte* addr, size_t bytes, size_t alignment) noexcept
-        {
-            const mem_hdr h = header_at(addr);
-            if (is_allocated(h))
-                return std::nullopt;
-
-            const uintptr_t block_start = reinterpret_cast<uintptr_t>(addr) - h.before;
-            const uintptr_t block_end = block_start + h.before + sizeof(mem_hdr) + h.after;
-            const uintptr_t block_size = block_end - block_start;
-
-            const uintptr_t potential_start = block_start + sizeof(mem_hdr);
-            const uintptr_t suitably_aligned_start = align_up(potential_start, alignment);
-            const size_t padding = suitably_aligned_start - potential_start;
-            const size_t full_needed_size = padding         // padding until user data (which will actually end up BEFORE the header)
-                                          + sizeof(mem_hdr) // header
-                                          + bytes;          // user data
-
-            if (full_needed_size <= block_size)
-            {
-                mem_hdr updated_hdr;
-                
-                if (full_needed_size + sizeof(mem_hdr) < block_size)
-                {
-                    std::byte* const updated_block_end = reinterpret_cast<std::byte*>(block_start) + full_needed_size;
-
-                    // split
-                    updated_hdr.prev = h.prev;
-                    updated_hdr.next = updated_block_end;
-                    updated_hdr.before = padding;
-                    updated_hdr.after = bytes;
-                    mark_allocated(updated_hdr);
-
-                    mem_hdr new_next_hdr;
-                    new_next_hdr.prev = reinterpret_cast<std::byte*>(block_start) + padding;
-                    new_next_hdr.next = h.next;
-                    new_next_hdr.before = 0;
-                    new_next_hdr.after = block_end - reinterpret_cast<uintptr_t>(updated_block_end) - sizeof(mem_hdr);
-                    mark_unallocated(new_next_hdr);
-
-                    return std::make_tuple(
-                        reinterpret_cast<std::byte*>(block_start) + padding, // start of header
-                        reinterpret_cast<std::byte*>(block_start) + padding + sizeof(mem_hdr), // start of user data
-                        updated_block_end, // end of block (and location for the 'new_next_hdr')
-                        updated_hdr, new_next_hdr
-                    );
-                }
-                else
-                {
-                    // no split
-                    updated_hdr.prev = h.prev;
-                    updated_hdr.next = h.next;
-                    updated_hdr.before = padding;
-                    updated_hdr.after = block_end - suitably_aligned_start;
-                    mark_allocated(updated_hdr);
-
-                    return std::make_tuple(
-                        reinterpret_cast<std::byte*>(block_start) + padding, // start of header
-                        reinterpret_cast<std::byte*>(block_start) + padding + sizeof(mem_hdr), // start of user data
-                        nullptr,              // end of block (no new block, so normally not used)
-                        updated_hdr, std::nullopt
-                    );
-                }
-            }
-            return std::nullopt;
-        }
-
-    public:
-        arena()
-            : m_data()
-            , m_search_from(reinterpret_cast<uintptr_t>(m_data))
-        {
-            if (N < sizeof(mem_hdr))
-                throw std::invalid_argument("arena size is too small");
-            if (N & ((size_t)1 << (sizeof(size_t) * CHAR_BIT - 1)))
-                throw std::invalid_argument("arena size is too large");
-
-            mem_hdr hdr;
-            hdr.next = m_data;
-            hdr.before = 0;
-            hdr.after = N - sizeof(mem_hdr);
-            mark_unallocated(hdr);
-            header_at(m_data, hdr);
-        }
-
-        ~arena() override = default;
-
-    protected:
-        virtual void* do_allocate(size_t bytes, size_t alignment = __STDCPP_DEFAULT_NEW_ALIGNMENT__) override
-        {
-            if (!is_power_of_two(alignment))
-                throw std::invalid_argument("alignment is not a power of two");
-
-#if SUPDEF_MULTITHREADED
-            std::lock_guard lock(m_mutex);
-#endif
-            std::byte* addr = reinterpret_cast<std::byte*>(m_search_from);
-            while (addr)
-            {
-                auto can_contain_res = can_contain(addr, bytes, alignment);
-                if (can_contain_res.has_value())
-                {
-                    auto [hdr_start, data_start, next_block, hdr, next_hdr] = can_contain_res.value();
-                    
-                    header_at(hdr_start, hdr);
-
-                    if (next_hdr.has_value())
-                    {
-                        header_at(next_block, next_hdr.value());
-                        m_search_from = reinterpret_cast<uintptr_t>(next_block);
-                    }
-                    else
-                        m_search_from = reinterpret_cast<uintptr_t>(hdr.next);
-
-                    
-                    mem_hdr prev = header_at(hdr.prev);
-                    prev.next = hdr_start;
-                    header_at(hdr.prev, prev);
-
-                    return data_start;
-                }
-                next_header(addr);
-            }
-
-            return nullptr;
-        }
-    private:
-        alignas(std::max_align_t) std::byte m_data[N];
-        uintptr_t m_search_from;
-#if SUPDEF_MULTITHREADED
-        std::recursive_mutex m_mutex;
-#endif
+        
     };
+}
+
+constexpr supdef::detail::mem_hdr
+supdef::detail::mem_hdr::at(std::byte* ptr) noexcept
+{
+    mem_hdr hdr;
+    ::memcpy(&hdr, ptr, sizeof(mem_hdr));
+    return hdr;
+}
+
+constexpr void
+supdef::detail::mem_hdr::at(std::byte* ptr, const supdef::detail::mem_hdr& hdr) noexcept
+{
+    ::memcpy(ptr, &hdr, sizeof(mem_hdr));
+}
+
+constexpr supdef::detail::mem_hdr
+supdef::detail::mem_hdr::at(uintptr_t ptr) noexcept
+{
+    return at(reinterpret_cast<std::byte*>(ptr));
+}
+
+constexpr void
+supdef::detail::mem_hdr::at(uintptr_t ptr, const supdef::detail::mem_hdr& hdr) noexcept
+{
+    at(reinterpret_cast<std::byte*>(ptr), hdr);
 }
 
 #endif

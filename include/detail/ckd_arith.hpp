@@ -20,6 +20,8 @@
 
 #include <stdckdint.h>
 
+#include <cstdbool>
+
 namespace supdef
 {
 #undef  __CKD_ARITH_DECL

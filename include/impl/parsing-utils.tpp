@@ -42,6 +42,20 @@ namespace
         return result;
     }
 
+    static auto reverse_find_if(
+        const std::bidirectional_iterator auto begin, const std::bidirectional_iterator auto end,
+        auto&& pred
+    ) {
+        auto iter = end;
+        while (iter != begin)
+        {
+            stdranges::advance(iter, -1);
+            if (pred(*iter))
+                return iter;
+        }
+        return iter;
+    }
+
     std::list<::supdef::token> isolate_line(
         std::list<::supdef::token>& tokens,
         std::list<::supdef::token>::iterator& pos
@@ -457,7 +471,8 @@ namespace
     };
 
     template <typename IterT>
-    concept points_to_token = std::same_as<typename std::iterator_traits<IterT>::value_type, ::supdef::token>;
+    concept points_to_token = std::same_as<typename std::iterator_traits<IterT>::value_type, ::supdef::token> &&
+                              std::same_as<std::iter_value_t<IterT>, ::supdef::token>;
 
     template <typename IterT>
     concept points_to_token_and_bidir = points_to_token<IterT> && std::bidirectional_iterator<IterT>;
@@ -506,21 +521,6 @@ namespace
         return iter;
     }
 
-    static auto reverse_find_if(
-        const std::bidirectional_iterator auto begin, const std::bidirectional_iterator auto end,
-        auto&& pred
-    )
-    {
-        auto iter = end;
-        while (iter != begin)
-        {
-            stdranges::advance(iter, -1);
-            if (pred(*iter))
-                return iter;
-        }
-        return iter;
-    }
-
     static auto replace_from_to(
         auto& destcont, std::input_iterator auto destfirst, std::input_iterator auto destlast,
         std::input_iterator auto srcfirst, std::input_iterator auto srclast
@@ -537,7 +537,7 @@ namespace
     {
         destcont.erase(destfirst, destlast);
         return stdranges::copy(
-            std::forward<std::remove_reference_t<decltype(srcrange)>>(srcrange),
+            std::forward<decltype(srcrange)>(srcrange),
             std::inserter(destcont, destlast)
         );
     }
@@ -550,7 +550,7 @@ namespace
         destcont.erase(destfirst, destlast);
         return destcont.insert(
             destlast,
-            std::forward<std::remove_reference_t<decltype(srcelem)>>(srcelem)
+            std::forward<decltype(srcelem)>(srcelem)
         );
     }
 
@@ -757,6 +757,7 @@ constexpr boost::logic::tribool supdef::registered_base::parse_bool_opt(
 }
 #endif
 
+#if 0
 namespace detail
 {
     namespace runnable_langs
@@ -842,7 +843,6 @@ supdef::parser::registered_runnable::is_lang_identifier(std::u32string_view sv)
     return std::get<1>(langs[longest_idx]);
 }
 
-#if 0
 #undef  __MK_ASSERT
 #undef  __MK_UNASSERT
 #define __MK_ASSERT(xstr, xval) static_assert( \

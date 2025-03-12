@@ -16,7 +16,7 @@ namespace supdef
         class node
         {
         public:
-            enum kind
+            enum class kind
                 : uint64_t
             {
 #pragma push_macro("IS")
@@ -87,58 +87,161 @@ namespace supdef
                 return this->is(k);
             }
 
-            kind operator&(kind k) const
-            {
-                return node_kind() & k;
-            }
-            kind operator|(kind k) const
-            {
-                return node_kind() | k;
-            }
-            kind operator^(kind k) const
-            {
-                return node_kind() ^ k;
-            }
-            kind operator~() const
-            {
-                return ~node_kind();
-            }
+            kind operator&(kind k) const;
+            kind operator|(kind k) const;
+            kind operator^(kind k) const;
+            kind operator~() const;
 
-            bool is(kind k) const
-            {
-                switch (k)
-                {
-                case kind::directive:
-                    [[__fallthrough__]];
-                case kind::expression:
-                    [[__fallthrough__]];
-                case kind::block:
-                    return node_kind() & IS(k);
-                default:
-                    return node_kind() == k;
-                }
-            }
+            template <typename Self>
+            bool is(this Self&& self, kind k);
 
-            ::supdef::token_loc location() const
+            const ::supdef::token_loc& location() const &
             {
                 return m_loc;
             }
+            ::supdef::token_loc&& location() &&
+            {
+                return std::move(m_loc);
+            }
+            
 
         private:
             ::supdef::token_loc m_loc;
-#pragma pop_macro("IS")
-#pragma pop_macro("INDEX")
         };
         class directive_node;
         class expression_node;
         class block_node;
         class text_node;
-
+        
         using shared_node = ::supdef::shared_ptr<node>;
         using shared_directive = ::supdef::shared_ptr<directive_node>;
         using shared_expression = ::supdef::shared_ptr<expression_node>;
         using shared_block = ::supdef::shared_ptr<block_node>;
         using shared_text = ::supdef::shared_ptr<text_node>;
+        
+        template <typename LhsT, typename RhsT, typename EnumT>
+        concept valid_enum_class_op_combination_lhs_is_enum_class = std::same_as<LhsT, EnumT> &&
+            (std::same_as<RhsT, EnumT> || std::same_as<RhsT, std::underlying_type_t<EnumT>> || std::convertible_to<RhsT, std::underlying_type_t<EnumT>>);
+        
+        template <typename LhsT, typename RhsT, typename EnumT>
+        concept valid_enum_class_op_combination_rhs_is_enum_class = std::same_as<RhsT, EnumT> &&
+            (std::same_as<LhsT, EnumT> || std::same_as<LhsT, std::underlying_type_t<EnumT>> || std::convertible_to<LhsT, std::underlying_type_t<EnumT>>);
+        
+        template <typename LhsT, typename RhsT, typename EnumT>
+        concept valid_enum_class_op_combination = valid_enum_class_op_combination_lhs_is_enum_class<LhsT, RhsT, EnumT> ||
+                                                  valid_enum_class_op_combination_rhs_is_enum_class<LhsT, RhsT, EnumT>;
+        
+        template <typename LhsT, typename RhsT, typename EnumT>
+        concept enum_class_op_is_noexcept = std::is_nothrow_convertible_v<LhsT, std::underlying_type_t<EnumT>> &&
+                                            std::is_nothrow_convertible_v<RhsT, std::underlying_type_t<EnumT>>;
+        
+        // operators for enum class kind
+        template <typename LhsT, typename RhsT>
+            requires valid_enum_class_op_combination<LhsT, RhsT, node::kind>
+        inline node::kind operator&(LhsT lhs, RhsT rhs) noexcept(enum_class_op_is_noexcept<LhsT, RhsT, node::kind>)
+        {
+            return static_cast<node::kind>(std::to_underlying(lhs) & std::to_underlying(rhs));
+        }
+        
+        template <typename LhsT, typename RhsT>
+            requires valid_enum_class_op_combination<LhsT, RhsT, node::kind>
+        inline node::kind operator|(LhsT lhs, RhsT rhs) noexcept(enum_class_op_is_noexcept<LhsT, RhsT, node::kind>)
+        {
+            return static_cast<node::kind>(std::to_underlying(lhs) | std::to_underlying(rhs));
+        }
+        
+        template <typename LhsT, typename RhsT>
+            requires valid_enum_class_op_combination<LhsT, RhsT, node::kind>
+        inline node::kind operator^(LhsT lhs, RhsT rhs) noexcept(enum_class_op_is_noexcept<LhsT, RhsT, node::kind>)
+        {
+            return static_cast<node::kind>(std::to_underlying(lhs) ^ std::to_underlying(rhs));
+        }
+
+        inline node::kind operator~(node::kind k) noexcept
+        {
+            return static_cast<node::kind>(~std::to_underlying(k));
+        }
+        
+        inline node::kind operator<<(node::kind k, std::make_unsigned_t<std::underlying_type_t<node::kind>> n) noexcept
+        {
+            return static_cast<node::kind>(std::to_underlying(k) << n);
+        }
+        
+        inline node::kind operator>>(node::kind k, std::make_unsigned_t<std::underlying_type_t<node::kind>> n) noexcept
+        {
+            return static_cast<node::kind>(std::to_underlying(k) >> n);
+        }
+        
+        template <typename LhsT, typename RhsT>
+            requires valid_enum_class_op_combination<LhsT, RhsT, node::kind>
+        inline node::kind& operator&=(LhsT& lhs, RhsT rhs) noexcept(enum_class_op_is_noexcept<LhsT, RhsT, node::kind>)
+        {
+            return lhs = lhs & rhs;
+        }
+        
+        template <typename LhsT, typename RhsT>
+            requires valid_enum_class_op_combination<LhsT, RhsT, node::kind>
+        inline node::kind& operator|=(LhsT& lhs, RhsT rhs) noexcept(enum_class_op_is_noexcept<LhsT, RhsT, node::kind>)
+        {
+            return lhs = lhs | rhs;
+        }
+        
+        template <typename LhsT, typename RhsT>
+            requires valid_enum_class_op_combination<LhsT, RhsT, node::kind>
+        inline node::kind& operator^=(LhsT& lhs, RhsT rhs) noexcept(enum_class_op_is_noexcept<LhsT, RhsT, node::kind>)
+        {
+            return lhs = lhs ^ rhs;
+        }
+        
+        inline node::kind& operator<<=(node::kind& lhs, std::make_unsigned_t<std::underlying_type_t<node::kind>> n) noexcept
+        {
+            return lhs = lhs << n;
+        }
+        
+        inline node::kind& operator>>=(node::kind& lhs, std::make_unsigned_t<std::underlying_type_t<node::kind>> n) noexcept
+        {
+            return lhs = lhs >> n;
+        }
+        
+        node::kind node::operator&(node::kind k) const
+        {
+            return this->node_kind() & k;
+        }
+        node::kind node::operator|(node::kind k) const
+        {
+            return this->node_kind() | k;
+        }
+        node::kind node::operator^(node::kind k) const
+        {
+            return this->node_kind() ^ k;
+        }
+        node::kind node::operator~() const
+        {
+            return ~this->node_kind();
+        }
+
+        template <typename Self>
+        bool node::is(this Self&& self, node::kind k)
+        {
+            switch (k)
+            {
+            case node::kind::directive:
+                [[__fallthrough__]];
+            case node::kind::expression:
+                [[__fallthrough__]];
+            case node::kind::block: {
+                    typedef std::remove_cvref_t<Self> self_type;
+                    if constexpr (std::is_final_v<self_type>)
+                        return static_cast<bool>(std::forward<Self>(self).node_kind() & IS(k));
+                }
+                [[__fallthrough__]];
+            default:
+                return std::forward<Self>(self).node_kind() == k;
+            }
+        }
+
+#pragma pop_macro("IS")
+#pragma pop_macro("INDEX")
 
         namespace detail
         {

@@ -12,7 +12,7 @@ namespace supdef::ast
             std::vector<shared_node>&& step,
             std::vector<shared_node>&& repl
         )   : node(std::move(loc))
-            , block_node(std::move(repl))
+            , block_node(std::vector( { std::move(repl) } ))
             , m_init(std::move(init))
             , m_cond(std::move(cond))
             , m_step(std::move(step))
@@ -32,6 +32,11 @@ namespace supdef::ast
         const std::vector<shared_node>& step() const
         {
             return m_step;
+        }
+
+        const std::vector<shared_node>& body() const
+        {
+            return this->replacement();
         }
 
         virtual kind node_kind() const override
