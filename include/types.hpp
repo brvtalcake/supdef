@@ -222,10 +222,129 @@ namespace supdef
         using select_overload<RetT(ArgsT...) noexcept>::operator=;
     };
 
-    using bigint = boostmp::mpz_int;
-    using bigfloat = boostmp::mpf_float;
-    using bigdecimal = boostmp::mpq_rational;
-    using bigcomplex = boostmp::mpc_complex;
+    using bigint_base = boostmp::mpz_int;
+    using bigfloat_base = boostmp::mpfr_float;
+    using bigdecimal_base = boostmp::mpq_rational;
+    using bigcomplex_base = boostmp::mpfi_float;
+
+    struct big_numbers_base
+    {
+        template <typename T, typename Self>
+        constexpr T as(this Self&& self)
+        {
+            return static_cast<T>(self);
+        }
+    };
+
+    struct bigint
+        : public virtual big_numbers_base
+        , public bigint_base
+    {
+        using bigint_base::bigint_base;
+    };
+
+    struct bigfloat
+        : public virtual big_numbers_base
+        , public bigfloat_base
+    {
+        using bigfloat_base::bigfloat_base;
+    };
+
+    struct bigdecimal
+        : public virtual big_numbers_base
+        , public bigdecimal_base
+    {
+        using bigdecimal_base::bigdecimal_base;
+    };
+
+    struct bigcomplex
+        : public virtual big_numbers_base
+        , public bigcomplex_base
+    {
+        using bigcomplex_base::bigcomplex_base;
+    };
+
+    // big numerator
+    struct bignum : bigint
+    {
+        using bigint::bigint;
+
+        constexpr bigdecimal operator/(const bigint& rhs) const
+        {
+            return bigdecimal(*this) / rhs;
+        }
+    };
+    // big denominator
+    struct bigdenom : bigint
+    {
+        using bigint::bigint;
+    };
+
+    template <char... Chars>
+    consteval bigint operator""_bigint()
+    {
+        char str[] = {Chars..., '\0'};
+        return bigint(std::string_view{str});
+    }
+    consteval bigint operator""_bigint(const char* str, size_t len)
+    {
+        return bigint(std::string_view{str, len});
+    }
+
+    template <char... Chars>
+    consteval bigfloat operator""_bigfloat()
+    {
+        char str[] = {Chars..., '\0'};
+        return bigfloat(std::string_view{str});
+    }
+    consteval bigfloat operator""_bigfloat(const char* str, size_t len)
+    {
+        return bigfloat(std::string_view{str, len});
+    }
+
+    template <char... Chars>
+    consteval bigdecimal operator""_bigdec()
+    {
+        char str[] = {Chars..., '\0'};
+        return bigdecimal(std::string_view{str});
+    }
+    consteval bigdecimal operator""_bigdec(const char* str, size_t len)
+    {
+        return bigdecimal(std::string_view{str, len});
+    }
+
+    template <char... Chars>
+    consteval bigcomplex operator""_bigcomplex()
+    {
+        char str[] = {Chars..., '\0'};
+        return bigcomplex(std::string_view{str});
+    }
+    consteval bigcomplex operator""_bigcomplex(const char* str, size_t len)
+    {
+        return bigcomplex(std::string_view{str, len});
+    }
+
+    template <char... Chars>
+    consteval bignum operator""_bignum()
+    {
+        char str[] = {Chars..., '\0'};
+        return bignum(std::string_view{str});
+    }
+    consteval bignum operator""_bignum(const char* str, size_t len)
+    {
+        return bignum(std::string_view{str, len});
+    }
+
+    template <char... Chars>
+    consteval bigdenom operator""_bigdenom()
+    {
+        char str[] = {Chars..., '\0'};
+        return bigdenom(std::string_view{str});
+    }
+    consteval bigdenom operator""_bigdenom(const char* str, size_t len)
+    {
+        return bigdenom(std::string_view{str, len});
+    }
 
     template <
         typename Key, typename T, typename... Rest
@@ -288,7 +407,10 @@ namespace supdef
     );
 
 #undef  FWD_AUTO
-#define FWD_AUTO(...) ::std::forward<decltype(__VA_ARGS__)>(__VA_ARGS__)
+#define FWD_AUTO(...) (::std::forward<decltype(__VA_ARGS__)>(__VA_ARGS__))
+
+#undef  AS_CONSTEVAL
+#define AS_CONSTEVAL(...) (([] { return (__VA_ARGS__); })())
 
 #if SUPDEF_MULTITHREADED
     template <typename T>
@@ -418,7 +540,7 @@ namespace supdef
     static inline ::supdef::shared_ptr<T> static_pointer_cast(
         auto&& ptr
     ) noexcept(
-        (bool) ([] consteval { return ::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("static"); }())
+        AS_CONSTEVAL(::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("static"))
     ) {
 #if SUPDEF_MULTITHREADED
         return std::static_pointer_cast<T>(FWD_AUTO(ptr));
@@ -431,7 +553,7 @@ namespace supdef
     static inline ::supdef::shared_ptr<T> dynamic_pointer_cast(
         auto&& ptr
     ) noexcept(
-        (bool) ([] consteval { return ::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("dynamic"); }())
+        AS_CONSTEVAL(::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("dynamic"))
     ) {
 #if SUPDEF_MULTITHREADED
         return std::dynamic_pointer_cast<T>(FWD_AUTO(ptr));
@@ -444,7 +566,7 @@ namespace supdef
     static inline ::supdef::shared_ptr<T> const_pointer_cast(
         auto&& ptr
     ) noexcept(
-        (bool) ([] consteval { return ::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("const"); }())
+        AS_CONSTEVAL(::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("const"))
     ) {
 #if SUPDEF_MULTITHREADED
         return std::const_pointer_cast<T>(FWD_AUTO(ptr));
@@ -457,7 +579,7 @@ namespace supdef
     static inline ::supdef::shared_ptr<T> reinterpret_pointer_cast(
         auto&& ptr
     ) noexcept(
-        (bool) ([] consteval { return ::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("reinterpret"); }())
+        AS_CONSTEVAL(::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("reinterpret"))
     ) {
 #if SUPDEF_MULTITHREADED
         return std::reinterpret_pointer_cast<T>(FWD_AUTO(ptr));
@@ -466,7 +588,7 @@ namespace supdef
 #endif
     }
 
-    struct slice : stdranges::range_adaptor_closure<slice>
+    struct slice : public stdranges::range_adaptor_closure<slice>
     {
         size_t start = 0;
         size_t end = std::string_view::npos;
@@ -486,7 +608,7 @@ namespace supdef
 
     template <stdranges::view R>
         requires can_prev<R>
-    struct drop_last_view : stdranges::view_interface<drop_last_view<R>>
+    struct drop_last_view : public stdranges::view_interface<drop_last_view<R>>
     {
         using value_type = stdranges::range_value_t<R>;
         using reference = stdranges::range_reference_t<R>;
@@ -546,10 +668,10 @@ namespace supdef
         }
     };
 
-    struct drop_last_closure : stdranges::range_adaptor_closure<drop_last_closure>
+    struct drop_last_closure : public stdranges::range_adaptor_closure<drop_last_closure>
     {
     private:
-        struct drop_last_partial_apply_closure : stdranges::range_adaptor_closure<drop_last_partial_apply_closure>
+        struct drop_last_partial_apply_closure : public stdranges::range_adaptor_closure<drop_last_partial_apply_closure>
         {
             const drop_last_closure* ptr;
             size_t n;
@@ -604,6 +726,57 @@ namespace supdef
     };
 
     inline constexpr drop_last_closure drop_last;
+
+    using unused_t = decltype(std::ignore);
+
+    template <typename T>
+    concept has_boxed_type = std::is_array_v<T> || requires {
+        typename std::pointer_traits<
+            std::remove_cvref_t<T>
+        >::element_type;
+    };
+
+    template <typename T>
+        requires has_boxed_type<T>
+    struct boxed_type
+        : public std::type_identity<
+            typename std::pointer_traits<
+                std::remove_cvref_t<T>
+            >::element_type
+        >
+    {
+    };
+
+    template <typename T>
+    struct boxed_type<T[]>
+        : public std::type_identity<T>
+    {
+    };
+
+    template <typename T, size_t N>
+    struct boxed_type<T[N]>
+        : public std::type_identity<T>
+    {
+    };
+
+    template <typename T>
+    using boxed_type_t = typename boxed_type<T>::type;
+
+    static_assert(std::same_as<boxed_type_t<int*>, int>, "boxed_type_t<int*> is not int");
+    static_assert(std::same_as<boxed_type_t<boost::local_shared_ptr<int>>, int>, "boxed_type_t<boost::local_shared_ptr<int>> is not int");
+    static_assert(std::same_as<boxed_type_t<int[]>, int>, "boxed_type_t<int[]> is not int");
+    static_assert(std::same_as<boxed_type_t<int[5]>, int>, "boxed_type_t<int[5]> is not int");
+
+    static_assert(std::same_as<boxed_type_t<const int*>, const int>, "boxed_type_t<const int*> is not const int");
+    static_assert(std::same_as<boxed_type_t<boost::local_shared_ptr<const int>>, const int>, "boxed_type_t<boost::local_shared_ptr<const int>> is not const int");
+    static_assert(std::same_as<boxed_type_t<const int[]>, const int>, "boxed_type_t<const int[]> is not const int");
+    static_assert(std::same_as<boxed_type_t<const int[5]>, const int>, "boxed_type_t<const int[5]> is not const int");
+
+    static_assert(std::same_as<boxed_type_t<const int* const>, const int>, "boxed_type_t<const int*> is not const int");
+    static_assert(std::same_as<boxed_type_t<boost::local_shared_ptr<const int> const>, const int>, "boxed_type_t<boost::local_shared_ptr<const int>> is not const int");
+
+    static_assert(std::same_as<boxed_type_t<volatile int* const volatile&>, volatile int>, "boxed_type_t<volatile int* const volatile&> is not volatile int");
+    static_assert(std::same_as<boxed_type_t<boost::local_shared_ptr<volatile int> const volatile&>, volatile int>, "boxed_type_t<boost::local_shared_ptr<volatile int> const volatile&> is not volatile int");
 }
 
 template <typename R>

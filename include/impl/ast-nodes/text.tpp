@@ -10,6 +10,11 @@ namespace supdef::ast
         {
         }
 
+        bool is_identifier() const
+        {
+            return m_tok.kind == token_kind::identifier;
+        }
+
         virtual kind node_kind() const override
         {
             return kind::text;

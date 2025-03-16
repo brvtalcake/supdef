@@ -76,6 +76,34 @@ function mk_tmp_jobfile()
     printf '%s' "$_jobfile"
 }
 
+function _replace_pattern()
+{
+    local _template="$1"
+    shift
+    local _index="$1"
+    shift
+    sed -e "s#%$_index#$*#g" <<< "$_template"
+}
+
+function replace()
+{
+    local _template="$1"
+    shift
+    local _replacement
+    local _index=1
+    for _replacement in "$@"; do
+        _template="$(_replace_pattern "$_template" $_index "$_replacement")"
+        _index=$(( _index + 1 ))
+    done
+    printf '%s' "$_template"
+}
+
+function wait_for_user_input()
+{
+    echo "Press enter to continue..."
+    read
+}
+
 ARGS="$@"
 if [ -z "$ARGS" ]; then
     files="$(find -L src -name '*.cpp' -o -name '*.cc' | xargs)"
@@ -89,7 +117,7 @@ fi
 jobfile="$(mk_tmp_jobfile)"
 trap "rm -f $jobfile" EXIT
 
-common_cflags="-fconcepts-diagnostics-depth=5 -fdiagnostics-color=always -pipe -std=gnu++23 -Wall -Wextra -march=native -mtune=native -flto -Wno-unused-function -Wno-comment -Wno-unused-local-typedefs"
+common_cflags="-fconcepts-diagnostics-depth=5 -fdiagnostics-color=always -pipe -std=gnu++23 -Wall -Wextra -march=native -mtune=native -flto -Wno-unused-function -Wno-comment -Wno-unused-local-typedefs -Wno-unused-parameter -Wno-unused-label"
 
 define LIBS "icu-io" "libgrapheme" "simdutf" "gmp" "mpfr"
 define CPPFLAGS "-Iinclude -D_GNU_SOURCE=1 -DSTATIC_INITIALIZER_ALLOCATION=1 -DBOOST_PP_LIMIT_MAG=1024 -DBOOST_PP_LIMIT_FOR=1024 -DBOOST_PP_LIMIT_REPEAT=1024 -DBOOST_PP_LIMIT_ITERATION=1024"
@@ -104,7 +132,10 @@ cmd rm -rf obj
 
 for file in $files; do
     cmd mkdir -p "$(dirname "$(mk_objfile $file)")"
-    echo g++ $CPPFLAGS $CFLAGS -c $file -o "$(mk_objfile $file)" \; >> $jobfile
+    echo -n -e \
+        "$(replace 'echo %1 && %1 ;\n' \
+            "g++ $CPPFLAGS $CFLAGS -c $file -o \"$(mk_objfile $file)\"" \
+        )" >> $jobfile
 done
 
 cmd parallel --joblog parallel.log -j`nproc` < $jobfile

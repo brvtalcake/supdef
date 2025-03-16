@@ -10,6 +10,8 @@ namespace supdef::ast
             supdef,
             runnable,
             runnable_lang,
+            float_env,
+            integer_env,
             other
         };
         pragma_node(

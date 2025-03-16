@@ -6,8 +6,6 @@
 
 #include <bits/stdc++.h>
 
-#include <ext/hash_map>
-
 #include <boost/mpl/for_each.hpp>
 #include <boost/mpl/vector.hpp>
 #include <boost/mpl/transform.hpp>
@@ -259,6 +257,203 @@ static inline decltype(auto) get_prev_token(
     return stdranges::prev(it, 1, begin);
 }
 
+template <typename NodeT>
+using parse_result = std::expected<supdef::shared_ptr<NodeT>, supdef::ast::parse_error>;
+
+static parse_result<supdef::ast::boolean_node>
+parse_boolean(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end,
+    bool allow_non_constant = false,
+    bool allow_coercion = false
+);
+static parse_result<supdef::ast::integer_node>
+parse_integer(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end,
+    bool allow_non_constant = false,
+    bool allow_coercion = false
+);
+static parse_result<supdef::ast::floating_node>
+parse_floating(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end,
+    bool allow_non_constant = false,
+    bool allow_coercion = false
+);
+
+static supdef::shared_ptr<supdef::ast::dump_node>
+parse_dump(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end
+);
+static supdef::shared_ptr<supdef::ast::embed_node>
+parse_embed(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end
+);
+static supdef::shared_ptr<supdef::ast::supdef_node>
+parse_supdef(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end
+);
+static supdef::shared_ptr<supdef::ast::runnable_node>
+parse_runnable(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end
+);
+static supdef::shared_ptr<supdef::ast::import_node>
+parse_import(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end
+);
+
+inline constexpr auto expression_parsers_table = hana::make_map(
+    hana::make_pair(
+        supdef::ast::node::kind::boolean,
+        hana::just(BOOST_HOF_LIFT(parse_boolean))
+    ),
+    hana::make_pair(
+        supdef::ast::node::kind::integer,
+        hana::just(BOOST_HOF_LIFT(parse_integer))
+    ),
+    hana::make_pair(
+        supdef::ast::node::kind::floating,
+        hana::just(BOOST_HOF_LIFT(parse_floating))
+    )
+);
+
+inline constexpr auto directive_parsers_table = hana::make_tuple(
+    hana::make_tuple(
+        BOOST_HANA_STRING("import"),
+        (tok_info) { .kkind = supdef::keyword_kind::import },
+        hana::just(BOOST_HOF_LIFT(parse_import))
+        
+    ),
+    hana::make_tuple(
+        BOOST_HANA_STRING("embed"),
+        (tok_info) { .kkind = supdef::keyword_kind::embed },
+        hana::just(BOOST_HOF_LIFT(parse_embed))
+    ),
+    hana::make_tuple(
+        BOOST_HANA_STRING("dump"),
+        (tok_info) { .kkind = supdef::keyword_kind::dump },
+        hana::just(BOOST_HOF_LIFT(parse_dump))
+    ),
+    hana::make_tuple(
+        BOOST_HANA_STRING("supdef"),
+        (tok_info) { .kkind = supdef::keyword_kind::supdef },
+        hana::just(BOOST_HOF_LIFT(parse_supdef))
+    ),
+    hana::make_tuple(
+        BOOST_HANA_STRING("runnable"),
+        (tok_info) { .kkind = supdef::keyword_kind::runnable },
+        hana::just(BOOST_HOF_LIFT(parse_runnable))
+    )
+);
+
+template <char... Chars>
+static constexpr auto get_parser_for_directive(
+    hana::string<Chars...>
+) {
+    using namespace hana::literals;
+    auto val = hana::find_if(
+        directive_parsers_table, hana::compose(
+            hana::equal.to(hana::string<Chars...>{}),
+            hana::_[0_c]
+        )
+    );
+    if constexpr (hana::is_just(val))
+        return val.value()[2_c];
+    else
+        return hana::nothing;
+}
+
+static_assert(
+    hana::is_just(get_parser_for_directive(BOOST_HANA_STRING("import"))),
+    "get_parser_for_directive(\"import\") should return a parser"
+);
+static_assert(
+    hana::is_nothing(get_parser_for_directive(BOOST_HANA_STRING("nonexistent"))),
+    "get_parser_for_directive(\"nonexistent\") should return nothing"
+);
+
+
+static parse_result<supdef::ast::boolean_node>
+parse_boolean(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end,
+    bool allow_non_constant = false,
+    bool allow_coercion = false
+) {
+    using namespace supdef;
+    using value_type = ast::boolean_node::value_type;
+    
+    value_type val;
+    if (accept_token(it, end, { .tkind = token_kind::boolean_literal }, HORIZWS(1)))
+    {
+        const token& tok = *next_token(it, end);
+        // Case-insensitive comparison, since the lexer should have
+        // already handled whether or not we allow things like "True"
+        // or "fALsE" etc.
+        // If the lexer is case-sensitive, then it didn't match previous
+        // examples anyway, and the comparison below is equivalent to
+        // the case-sensitive comparison.
+        // If the lexer is case-insensitive, then everything's fine
+        // since the comparison below is also case-insensitive.
+        val = strmatch(tok.data.value(), U"true", false);
+    }
+    
+    if (allow_coercion)
+    {
+        /* ast::shared_expression expr = parse_expression(it, begin, end);
+        if (expr)
+        {
+            if (allow_non_constant)
+        } */
+    }
+}
+
+static supdef::shared_ptr<supdef::ast::dump_node>
+parse_dump(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end
+) {
+    using namespace supdef;
+    throw ast::parse_error(it->loc, "not implemented");
+}
+
+static supdef::shared_ptr<supdef::ast::embed_node>
+parse_embed(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end
+) {
+    using namespace supdef;
+    throw ast::parse_error(it->loc, "not implemented");
+}
+
+static supdef::shared_ptr<supdef::ast::supdef_node>
+parse_supdef(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end
+) {
+    using namespace supdef;
+    
+
+}
+
 static supdef::shared_ptr<supdef::ast::import_node>
 parse_import(
     points_to_token_and_bidir auto& it,
@@ -302,74 +497,12 @@ parse_import(
     );
     if (path_len == 0)
         throw ast::parse_error(it->loc, "empty import path");
-    const token closingtok = next_token(it, end);
+    const token closingtok = *next_token(it, end);
     assert(closingtok.kind == token_kind::rangle);
     // use import start as the location
     expect_token(it, end, { .tkind = token_kind::newline }, HORIZWS(0), "expected newline after import path");
     return make_shared<ast::import_node>(path_start.loc, stdfs::path(printer::format(std::move(imported))));
 }
-
-#if 0
-static constexpr std::pair<std::u32string_view, tok_info> directives[] = {
-    { U"import", { .kkind = supdef::keyword_kind::import } },
-    { U"embed", { .kkind = supdef::keyword_kind::embed } },
-    { U"dump", { .kkind = supdef::keyword_kind::dump } },
-    { U"supdef", { .kkind = supdef::keyword_kind::supdef } },
-    { U"runnable", { .kkind = supdef::keyword_kind::runnable } }
-};
-#else
-static constexpr auto directives = ([] constexpr {
-    return hana::make_map(
-        hana::make_pair(
-            BOOST_HANA_STRING("import"), hana::make_tuple(
-                (tok_info) { .kkind = supdef::keyword_kind::import },
-                hana::just(BOOST_HOF_LIFT(parse_import))
-            )
-        ),
-        hana::make_pair(
-            BOOST_HANA_STRING("embed"), hana::make_tuple(
-                (tok_info) { .kkind = supdef::keyword_kind::embed },
-                hana::nothing
-            )
-        ),
-        hana::make_pair(
-            BOOST_HANA_STRING("dump"), hana::make_tuple(
-                (tok_info) { .kkind = supdef::keyword_kind::dump },
-                hana::nothing
-            )
-        ),
-        hana::make_pair(
-            BOOST_HANA_STRING("supdef"), hana::make_tuple(
-                (tok_info) { .kkind = supdef::keyword_kind::supdef },
-                hana::nothing
-            )
-        ),
-        hana::make_pair(
-            BOOST_HANA_STRING("runnable"), hana::make_tuple(
-                (tok_info) { .kkind = supdef::keyword_kind::runnable },
-                hana::nothing
-            )
-        )
-    );
-})();
-#endif
-
-template <char... Chars>
-static constexpr auto get_parser_for(
-    hana::string<Chars...>
-) {
-    using namespace hana::literals;
-    auto val = hana::find(directives, hana::string<Chars...>{});
-    if constexpr (val != hana::nothing)
-        return val.value()[1_c];
-    else
-        return hana::nothing;
-}
-
-static_assert(
-    hana::is_just(get_parser_for(BOOST_HANA_STRING("import"))),
-    "get_parser_for(\"import\") should return a parser"
-);
 
 static std::expected<supdef::ast::shared_node, supdef::ast::parse_error>
 parse_top_level(
@@ -387,49 +520,30 @@ parse_top_level(
             {
                 next_token(it, end);
                 // parse a directive
-#if 0
-                // import
-                if (accept_token(it, end, { .kkind = keyword_kind::import }, HORIZWS(0)))
-                {
-                    next_token(it, end);
-                    shared_ptr<ast::import_node> import = parse_import(it, begin, end);
-                    return reinterpret_pointer_cast<ast::node>(import);
-                }
-#elif 0
-                for (const auto dir : directives)
-                {
-                    if (accept_token(it, end, dir.second, HORIZWS(0)))
-                    {
-                        next_token(it, end);
-                        auto parser = get_parser_for(dir.first);
-                        if (parser)
-                        {
-                            auto ret = parser(it, begin, end);
-                            return reinterpret_pointer_cast<ast::node>(ret);
-                        }
-                        else
-                            throw ast::parse_error(
-                                it->loc,
-                                "internal error: no parser found for directive `" +
-                                printer::format(dir.first) + "`"
-                            );
-                    }
-                }
-#else
-                // use boost::hana to iterate over the directives
+
+                shared_ptr<ast::node> ret = nullptr;
                 hana::for_each(
-                    directives,
-                    [&](auto&& pair) constexpr {
-                        hana::if_(
-                            hana::not_equal(pair.second[1_c], hana::nothing),
-                            
-                        )
+                    directive_parsers_table,
+                    [&](auto&& tup) constexpr {
+                        using namespace hana::literals;
+                        if (ret)
+                            return;
+                        auto parser = FWD_AUTO(tup)[2_c];
+                        if constexpr (hana::is_just(parser))
+                        {
+                            if (accept_token(it, end, FWD_AUTO(tup)[1_c], HORIZWS(0)))
+                            {
+                                next_token(it, end);
+                                auto tmp = (parser.value())(it, begin, end);
+                                ret = dynamic_pointer_cast<ast::node>(tmp);
+                            }
+                        }
                     }
                 );
-#endif
+                if (ret)
+                    return ret;
             }
 
-builtin_funcall:
             // try to parse a builtin function call (e.g. `@len()` etc.)
             // if that fails, then just put the `@` token (and the preceding spaces too)
             // back to the token stream, and parse it as text instead

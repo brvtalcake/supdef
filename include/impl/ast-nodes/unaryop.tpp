@@ -3,12 +3,17 @@ namespace supdef::ast
     class unaryop_node final
         : public virtual node
         , public expression_node
+        , private expression_node_helper_types
     {
+        using expression_node_helper_types::helper;
+
     public:
+        using value_type = shared_expression;
+
         unaryop_node(
             ::supdef::token_loc&& loc,
             std::vector<token>&& op,
-            shared_node&& operand
+            value_type&& operand
         )   : node(std::move(loc))
             , expression_node()
             , m_op(std::move(op))
@@ -21,10 +26,17 @@ namespace supdef::ast
             return m_op;
         }
 
-        const shared_node& operand() const
+        const value_type& operand() const
         {
             return m_operand;
         }
+
+        virtual bool is_constant() const override
+        {
+            return m_operand->is_constant();
+        }
+
+        // can not coerce before evaluating the op, so do not implement
 
         virtual kind node_kind() const override
         {
@@ -33,6 +45,6 @@ namespace supdef::ast
 
     private:
         std::vector<token> m_op;
-        shared_node m_operand;
+        value_type m_operand;
     };
 }

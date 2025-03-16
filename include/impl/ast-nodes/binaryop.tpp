@@ -5,11 +5,13 @@ namespace supdef::ast
         , public expression_node
     {
     public:
+        using value_type = shared_expression;
+
         binaryop_node(
             ::supdef::token_loc&& loc,
             std::vector<token>&& op,
-            shared_node&& lhs,
-            shared_node&& rhs
+            value_type&& lhs,
+            value_type&& rhs
         )   : node(std::move(loc))
             , expression_node()
             , m_op(std::move(op))
@@ -24,10 +26,18 @@ namespace supdef::ast
             return m_op;
         }
 
-        const std::pair<shared_node, shared_node>& operands() const
+        const std::pair<value_type, value_type>& operands() const
         {
             return m_operands;
         }
+
+        virtual bool is_constant() const override
+        {
+            return m_operands.first ->is_constant() &&
+                   m_operands.second->is_constant();
+        }
+
+        // can not coerce before evaluating the op, so do not implement
 
         virtual kind node_kind() const override
         {
@@ -36,6 +46,6 @@ namespace supdef::ast
 
     private:
         std::vector<token> m_op;
-        std::pair<shared_node, shared_node> m_operands;
+        std::pair<value_type, value_type> m_operands;
     };
 }

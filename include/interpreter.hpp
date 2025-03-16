@@ -25,6 +25,12 @@
 
 namespace supdef
 {
+    namespace interpreter
+    {
+        inline constexpr size_t boost_multiprecision_default_precision = 1000;
+        inline constexpr boostmp::variable_precision_options boost_multiprecision_default_vpo = boostmp::variable_precision_options::preserve_all_precision;
+        inline constexpr boostmp::mpfr_allocation_type boost_multiprecision_default_mpfr_alloc = boostmp::mpfr_allocation_type::allocate_dynamic;
+    }
 #if 0
     struct registered_base
     {
@@ -224,6 +230,19 @@ namespace supdef
 
             // the language used
             lang_identifier ident;
+        };
+
+        struct float_params
+        {
+            size_t precision = boost_multiprecision_default_precision;
+            boostmp::variable_precision_options vpo = boost_multiprecision_default_vpo;
+            boostmp::mpfr_allocation_type mpfr_alloc = boost_multiprecision_default_mpfr_alloc;
+        };
+
+        struct integer_params
+        {
+            size_t precision = boost_multiprecision_default_precision;
+            boostmp::variable_precision_options vpo = boost_multiprecision_default_vpo;
         };
     }
 }

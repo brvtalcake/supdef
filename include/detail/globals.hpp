@@ -15,6 +15,7 @@
 #define GLOBAL_CAT(a, b) GLOBAL_CAT_IMPL(a, b)
 
 #undef  GLOBAL_DEF_START
+#undef  GLOBAL_DEF_END_BASIC
 #undef  GLOBAL_DEF_END
 #define GLOBAL_DEF_START(type, name)    \
     namespace supdef::globals           \
@@ -27,17 +28,25 @@
                 name, _initializer____  \
             )                           \
         ) {                             \
-            []() static noexcept {
+            []() static noexcept {      \
+    /**/
 
+#define GLOBAL_DEF_END_BASIC            \
+            }                           \
+        };                              \
+    }                                   \
+    /**/
 #define GLOBAL_DEF_END(type, name)              \
-            }                                   \
-        };                                      \
+    GLOBAL_DEF_END_BASIC                        \
+    namespace supdef::globals                   \
+    {                                           \
         extern type& GLOBAL_CAT(get_, name)()   \
             noexcept                            \
         {                                       \
             return name;                        \
         }                                       \
-    }
+    }                                           \
+    /**/
 
 #undef  GLOBAL_GETTER_DECL
 #define GLOBAL_GETTER_DECL(type, name)              \

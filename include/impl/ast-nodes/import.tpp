@@ -12,6 +12,13 @@ namespace supdef::ast
         {
         }
 
+        import_node(const ::supdef::token_loc& loc, stdfs::path&& path)
+            : node(loc)
+            , directive_node(false)
+            , m_path(std::move(path))
+        {
+        }
+
         const stdfs::path& path() const
         {
             return m_path;

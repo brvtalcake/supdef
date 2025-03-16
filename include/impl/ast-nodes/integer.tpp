@@ -7,9 +7,14 @@ namespace supdef::ast
     class integer_node final
         : public virtual node
         , public expression_node
+        , private expression_node_helper_types
     {
+        using expression_node_helper_types::helper;
+
     public:
-        integer_node(::supdef::token_loc&& loc, ::supdef::bigint&& val)
+        using value_type = std::variant<::supdef::bigint, shared_expression>;
+
+        integer_node(::supdef::token_loc&& loc, value_type&& val)
             : node(std::move(loc))
             , expression_node()
             , m_val(std::move(val))
@@ -34,9 +39,97 @@ namespace supdef::ast
             m_val = ::supdef::bigint(std::move(str));
         }
 
-        const ::supdef::bigint& val() const
+        const value_type& val() const
         {
             return m_val;
+        }
+
+        virtual bool is_constant() const override
+        {
+            return std::visit(
+                [](const auto& val) {
+                    using helper_type = helper<decltype(val)>;
+
+                    if constexpr (std::same_as<typename helper_type::unqual_val_t, ::supdef::bigint>)
+                        return true;
+                    else if constexpr (std::derived_from<typename helper_type::boxed_t, expression_node>)
+                        return val->is_constant();
+                    return false; // normally unreachable
+                },
+                m_val
+            );
+        }
+
+        virtual bool coerce_to_boolean() const override
+        {
+            this->requires_constant();
+
+            return std::visit(
+                [](const auto& val) -> bool {
+                    using helper_type = helper<decltype(val)>;
+
+                    if constexpr (std::same_as<typename helper_type::unqual_val_t, ::supdef::bigint>)
+                        return val.as<bool>();
+                    else if constexpr (std::derived_from<typename helper_type::boxed_t, expression_node>)
+                        return val->coerce_to_boolean();
+                    throw std::logic_error("unreachable");
+                },
+                m_val
+            );
+        }
+
+        virtual ::supdef::bigint coerce_to_integer() const override
+        {
+            this->requires_constant();
+
+            return std::visit(
+                [](const auto& val) -> ::supdef::bigint {
+                    using helper_type = helper<decltype(val)>;
+
+                    if constexpr (std::same_as<typename helper_type::unqual_val_t, ::supdef::bigint>)
+                        return val;
+                    else if constexpr (std::derived_from<typename helper_type::boxed_t, expression_node>)
+                        return val->coerce_to_integer();
+                    throw std::logic_error("unreachable");
+                },
+                m_val
+            );
+        }
+
+        virtual ::supdef::bigfloat coerce_to_floating() const override
+        {
+            this->requires_constant();
+
+            return std::visit(
+                [](const auto& val) -> ::supdef::bigfloat {
+                    using helper_type = helper<decltype(val)>;
+
+                    if constexpr (std::same_as<typename helper_type::unqual_val_t, ::supdef::bigint>)
+                        return val.as<::supdef::bigfloat>();
+                    else if constexpr (std::derived_from<typename helper_type::boxed_t, expression_node>)
+                        return val->coerce_to_floating();
+                    throw std::logic_error("unreachable");
+                },
+                m_val
+            );
+        }
+
+        virtual std::u32string coerce_to_string() const override
+        {
+            this->requires_constant();
+
+            return std::visit(
+                [](const auto& val) -> std::u32string {
+                    using helper_type = helper<decltype(val)>;
+
+                    if constexpr (std::same_as<typename helper_type::unqual_val_t, ::supdef::bigint>)
+                        return supdef::printer::unformat(val.str());
+                    else if constexpr (std::derived_from<typename helper_type::boxed_t, expression_node>)
+                        return val->coerce_to_string();
+                    throw std::logic_error("unreachable");
+                },
+                m_val
+            );
         }
 
         virtual kind node_kind() const override
@@ -45,6 +138,6 @@ namespace supdef::ast
         }
 
     private:
-        ::supdef::bigint m_val;
+        value_type m_val;
     };
 }

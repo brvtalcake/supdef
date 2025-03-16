@@ -5,6 +5,7 @@
 #include <tokenizer.hpp>
 #include <version.hpp>
 #include <parser.hpp>
+#include <printer.hpp>
 
 #include <bits/stdc++.h>
 #include <cstdint>
@@ -295,11 +296,23 @@ namespace supdef::ast
     {
     public:
         parse_error(const ::supdef::token_loc& loc, const std::string& msg)
-            : m_loc(loc), m_msg(msg)
+            : m_loc(loc)
+            , m_msg(msg)
         {
         }
         parse_error(const ::supdef::token_loc& loc, std::string&& msg)
-            : m_loc(loc), m_msg(std::move(msg))
+            : m_loc(loc)
+            , m_msg(std::move(msg))
+        {
+        }
+        parse_error(::supdef::token_loc&& loc, const std::string& msg)
+            : m_loc(std::move(loc))
+            , m_msg(msg)
+        {
+        }
+        parse_error(::supdef::token_loc&& loc, std::string&& msg)
+            : m_loc(std::move(loc))
+            , m_msg(std::move(msg))
         {
         }
 

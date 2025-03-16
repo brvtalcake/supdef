@@ -13,6 +13,20 @@ namespace supdef
 {
     namespace printer
     {
+        static std::u32string unformat(const std::string& str)
+        {
+            if (str.empty())
+                return U"";
+
+            size_t required_length = simdutf::utf32_length_from_utf8(str.data(), str.size());
+            std::unique_ptr<char32_t[]> buf(new char32_t[required_length]);
+            size_t result = simdutf::convert_valid_utf8_to_utf32(str.data(), str.size(), buf.get());
+            if (result == 0)
+                throw std::runtime_error("failed to convert utf8 to utf32");
+
+            return std::u32string(buf.get(), result);
+        }
+
         static std::string format(const std::u32string& str, size_t start = 0, size_t end = std::u32string::npos)
         {
             const auto& dataptr = str.data();
