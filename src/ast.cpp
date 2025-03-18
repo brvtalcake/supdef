@@ -398,7 +398,7 @@ parse_boolean(
     using namespace supdef;
     using value_type = ast::boolean_node::value_type;
     
-    value_type val;
+    ast::boolean_node node;
     if (accept_token(it, end, { .tkind = token_kind::boolean_literal }, HORIZWS(1)))
     {
         const token& tok = *next_token(it, end);
@@ -410,17 +410,24 @@ parse_boolean(
         // the case-sensitive comparison.
         // If the lexer is case-insensitive, then everything's fine
         // since the comparison below is also case-insensitive.
-        val = strmatch(tok.data.value(), U"true", false);
+        bool matches_true = strmatch(tok.data.value(), U"true", false);
+        node = ast::boolean_node{tok.loc, matches_true};
     }
     
     if (allow_coercion)
     {
-        /* ast::shared_expression expr = parse_expression(it, begin, end);
-        if (expr)
+        parse_result<ast::integer_node> maybe_int = parse_integer(it, begin, end, allow_non_constant, false);
+        if (maybe_int)
         {
-            if (allow_non_constant)
-        } */
+            val = supdef::dynamic_pointer_cast<ast::expression_node>(std::move(*maybe_int));
+            goto success;
+        }
+        parse_result<ast::floating_node> maybe_float = parse_floating(it, begin, end, allow_non_constant, false);
+
     }
+
+success:
+    return make_shared<ast::boolean_node>(std::move(val));
 }
 
 static supdef::shared_ptr<supdef::ast::dump_node>

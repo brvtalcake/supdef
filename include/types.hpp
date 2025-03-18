@@ -63,6 +63,8 @@ static_assert(
 
 #include <boost/preprocessor/cat.hpp>
 
+#include <boost/pfr.hpp>
+
 #include <experimental/scope>
 
 #define DO_PRAGMA(x) _Pragma (#x)
@@ -83,6 +85,8 @@ namespace mpl = ::boost::mpl;
 namespace hana = ::boost::hana;
 namespace mp11 = ::boost::mp11;
 namespace hof = ::boost::hof;
+namespace pool = ::boost::pool;
+namespace pfr = ::boost::pfr;
 
 #undef  PACKED_STRUCT
 #undef  PACKED_CLASS
@@ -111,9 +115,6 @@ namespace hof = ::boost::hof;
 #undef  ATTRIBUTE_UNINITIALIZED
 #define ATTRIBUTE_UNINITIALIZED [[__gnu__::__uninitialized__]]
 
-#include <detail/xxhash.hpp>
-#include <detail/ckd_arith.hpp>
-
 //#undef  is_expression_valid
 //#undef  is_expression_valid_v
 //#define is_expression_valid(...) std::bool_constant<requires { (__VA_ARGS__); }>
@@ -131,6 +132,202 @@ namespace hof = ::boost::hof;
 
 namespace supdef
 {
+    template <typename T>
+    concept reflectable = pfr::is_implicitly_reflectable_v<std::remove_reference_t<T>, void>;
+
+    template <typename FromT, typename ToT>
+    struct copy_refs_from
+    {
+        using type = std::remove_reference_t<ToT>;
+    };
+
+    template <typename FromT, typename ToT>
+    struct copy_refs_from<FromT&, ToT>
+    {
+        using type = std::add_lvalue_reference_t<
+            std::remove_reference_t<ToT>
+        >;
+    };
+
+    template <typename FromT, typename ToT>
+    struct copy_refs_from<FromT&&, ToT>
+    {
+        using type = std::add_rvalue_reference_t<
+            std::remove_reference_t<ToT>
+        >;
+    };
+
+    template <typename FromT, typename ToT>
+    struct copy_cv_from
+    {
+        using type = std::remove_cv_t<ToT>;
+    };
+
+    template <typename FromT, typename ToT>
+    struct copy_cv_from<FromT const, ToT>
+    {
+        using type = std::add_const_t<
+            std::remove_cv_t<ToT>
+        >;
+    };
+
+    template <typename FromT, typename ToT>
+    struct copy_cv_from<FromT volatile, ToT>
+    {
+        using type = std::add_volatile_t<
+            std::remove_cv_t<ToT>
+        >;
+    };
+
+    template <typename FromT, typename ToT>
+    struct copy_cv_from<FromT const volatile, ToT>
+    {
+        using type = std::add_cv_t<
+            std::remove_cv_t<ToT>
+        >;
+    };
+
+    template <typename FromT, typename ToT>
+    struct copy_cv_from<FromT, ToT&>
+    {
+        using type = std::add_lvalue_reference_t<
+            typename copy_cv_from<FromT, ToT>::type
+        >;
+    };
+
+    template <typename FromT, typename ToT>
+    struct copy_cv_from<FromT, ToT&&>
+    {
+        using type = std::add_rvalue_reference_t<
+            typename copy_cv_from<FromT, ToT>::type
+        >;
+    };
+
+    template <typename FromT, typename ToT>
+    struct copy_cv_from<FromT&, ToT>
+        : public copy_cv_from<FromT, ToT>
+    {
+    };
+
+    template <typename FromT, typename ToT>
+    struct copy_cv_from<FromT&&, ToT>
+        : public copy_cv_from<FromT, ToT>
+    {
+    };
+
+    template <typename FromT, typename ToT>
+    struct copy_quals_from
+        : public copy_cv_from<
+            FromT, typename copy_refs_from<
+                FromT, ToT
+            >::type
+        >
+    {
+    };
+
+    template <typename FromT, typename ToT>
+    using copy_refs_from_t = typename copy_refs_from<FromT, ToT>::type;
+    
+    template <typename FromT, typename ToT>
+    using copy_cv_from_t = typename copy_cv_from<FromT, ToT>::type;
+
+    template <typename FromT, typename ToT>
+    using copy_quals_from_t = typename copy_quals_from<FromT, ToT>::type;
+
+    namespace detail
+    {
+        template <size_t, typename...>
+        struct nth_type_impl;
+
+        template <size_t N, typename T, typename... Ts>
+        struct nth_type_impl<N, T, Ts...>
+        {
+            using type = typename nth_type_impl<N - 1, Ts...>::type;
+        };
+
+        template <typename T, typename... Ts>
+        struct nth_type_impl<0, T, Ts...>
+        {
+            using type = T;
+        };
+
+        template <typename T>
+        struct nth_type_impl<0, T>
+        {
+            using type = T;
+        };
+    }
+
+    template <size_t N, typename... Ts>
+        requires (N < sizeof...(Ts))
+    struct nth_type
+    {
+        using type = typename nth_type_impl<N, Ts...>::type;
+    };
+
+    template <size_t N, typename... Ts>
+    using nth_type_t = typename nth_type<N, Ts...>::type;
+
+    template <size_t, typename>
+    struct prepend_to_index_sequence;
+
+    template <size_t N, size_t... Is>
+    struct prepend_to_index_sequence<N, std::index_sequence<Is...>>
+    {
+        using type = std::index_sequence<N, Is...>;
+    };
+
+    template <size_t N, typename Is>
+    using prepend_to_index_sequence_t = typename prepend_to_index_sequence<N, Is>::type;
+
+    namespace detail
+    {
+        template <size_t Cur, size_t N, typename... Ts>
+        struct index_sequence_for_except_impl;
+
+        template <size_t Cur, size_t N, typename T, typename... Ts>
+        struct index_sequence_for_except_impl<Cur, N, T, Ts...>
+        {
+            using type = typename prepend_to_index_sequence<
+                Cur, typename index_sequence_for_except_impl<Cur + 1, N, Ts...>::type
+            >::type;
+        };
+
+        template <size_t N, typename T, typename... Ts>
+        struct index_sequence_for_except_impl<N, N, T, Ts...>
+        {
+            using type = typename index_sequence_for_except_impl<N + 1, N, Ts...>::type;
+        };
+
+        template <size_t Cur, size_t N>
+        struct index_sequence_for_except_impl<Cur, N>
+        {
+            using type = std::index_sequence<>;
+        };
+    }
+
+    template <size_t N, typename... Ts>
+    using index_sequence_for_except = typename
+        detail::index_sequence_for_except_impl<
+            0, N, Ts...
+        >::type;
+    
+    namespace detail
+    {
+        template <typename>
+        struct index_sequence_for_tuple_impl;
+
+        template <typename... T>
+        struct index_sequence_for_tuple_impl<std::tuple<T...>>
+        {
+            using type = std::index_sequence_for<T...>;
+        };
+    }
+    
+    template <typename T>
+    using index_sequence_for_tuple = typename
+        detail::index_sequence_for_tuple_impl<T>::type;
+
     template<typename T, typename G = decltype([](){})>
     consteval bool is_type_complete()
     {
@@ -510,7 +707,7 @@ namespace supdef
 
     // make_shared
     template <typename T, typename... Args>
-    static inline ::supdef::shared_ptr<T> make_shared(Args&&... args)
+    static inline decltype(auto) make_shared(Args&&... args)
         noexcept(
             ::supdef::detail::make_shared_is_noexcept<T, Args...>()
         )
@@ -523,7 +720,7 @@ namespace supdef
     }
 
     template <typename T, typename Alloc, typename... Args>
-    static inline ::supdef::shared_ptr<T> allocate_shared(
+    static inline decltype(auto) allocate_shared(
         Alloc&& alloc, Args&&... args
     ) noexcept(
         ::supdef::detail::allocate_shared_is_noexcept<T, Alloc, Args...>()
@@ -537,7 +734,7 @@ namespace supdef
 
 
     template <typename T>
-    static inline ::supdef::shared_ptr<T> static_pointer_cast(
+    static inline decltype(auto) static_pointer_cast(
         auto&& ptr
     ) noexcept(
         AS_CONSTEVAL(::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("static"))
@@ -550,7 +747,7 @@ namespace supdef
     }
 
     template <typename T>
-    static inline ::supdef::shared_ptr<T> dynamic_pointer_cast(
+    static inline decltype(auto) dynamic_pointer_cast(
         auto&& ptr
     ) noexcept(
         AS_CONSTEVAL(::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("dynamic"))
@@ -563,7 +760,7 @@ namespace supdef
     }
 
     template <typename T>
-    static inline ::supdef::shared_ptr<T> const_pointer_cast(
+    static inline decltype(auto) const_pointer_cast(
         auto&& ptr
     ) noexcept(
         AS_CONSTEVAL(::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("const"))
@@ -576,7 +773,7 @@ namespace supdef
     }
 
     template <typename T>
-    static inline ::supdef::shared_ptr<T> reinterpret_pointer_cast(
+    static inline decltype(auto) reinterpret_pointer_cast(
         auto&& ptr
     ) noexcept(
         AS_CONSTEVAL(::supdef::detail::ptr_cast_is_noexcept<T, decltype(ptr)>("reinterpret"))
@@ -762,21 +959,24 @@ namespace supdef
     template <typename T>
     using boxed_type_t = typename boxed_type<T>::type;
 
-    static_assert(std::same_as<boxed_type_t<int*>, int>, "boxed_type_t<int*> is not int");
-    static_assert(std::same_as<boxed_type_t<boost::local_shared_ptr<int>>, int>, "boxed_type_t<boost::local_shared_ptr<int>> is not int");
-    static_assert(std::same_as<boxed_type_t<int[]>, int>, "boxed_type_t<int[]> is not int");
-    static_assert(std::same_as<boxed_type_t<int[5]>, int>, "boxed_type_t<int[5]> is not int");
+}
+namespace detail
+{
+    namespace test
+    {
+        consteval bool test_adl_static_pointer_cast()
+        {
+            using namespace supdef;
 
-    static_assert(std::same_as<boxed_type_t<const int*>, const int>, "boxed_type_t<const int*> is not const int");
-    static_assert(std::same_as<boxed_type_t<boost::local_shared_ptr<const int>>, const int>, "boxed_type_t<boost::local_shared_ptr<const int>> is not const int");
-    static_assert(std::same_as<boxed_type_t<const int[]>, const int>, "boxed_type_t<const int[]> is not const int");
-    static_assert(std::same_as<boxed_type_t<const int[5]>, const int>, "boxed_type_t<const int[5]> is not const int");
+            struct A { char dummy; };
+            struct B : A {};
+            struct C : B {};
 
-    static_assert(std::same_as<boxed_type_t<const int* const>, const int>, "boxed_type_t<const int*> is not const int");
-    static_assert(std::same_as<boxed_type_t<boost::local_shared_ptr<const int> const>, const int>, "boxed_type_t<boost::local_shared_ptr<const int>> is not const int");
+            auto a = make_shared<A>();
 
-    static_assert(std::same_as<boxed_type_t<volatile int* const volatile&>, volatile int>, "boxed_type_t<volatile int* const volatile&> is not volatile int");
-    static_assert(std::same_as<boxed_type_t<boost::local_shared_ptr<volatile int> const volatile&>, volatile int>, "boxed_type_t<boost::local_shared_ptr<volatile int> const volatile&> is not volatile int");
+            auto b = dynamic_pointer_cast<B>(a);
+        }
+    }
 }
 
 template <typename R>
@@ -787,4 +987,15 @@ template <typename R>
 inline constexpr bool stdranges::enable_borrowed_range<supdef::drop_last_view<R>> = stdranges::enable_borrowed_range<R>;
 #endif
 
-#endif
+#include <test/copy_cvref_from.hpp>
+#include <test/nth_type.hpp>
+#include <test/prepend_to_is.hpp>
+#include <test/index_sequence_for_XXX.hpp>
+#include <test/boxed_type.hpp>
+
+#include <detail/xxhash.hpp>
+#include <detail/ckd_arith.hpp>
+#include <detail/simple_map.hpp>
+#include <detail/globals.hpp>
+
+#endif // TYPES_HPP

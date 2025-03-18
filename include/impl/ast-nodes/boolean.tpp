@@ -17,6 +17,20 @@ namespace supdef::ast
         {
         }
 
+        boolean_node(const ::supdef::token_loc& loc, value_type&& val)
+            : node(loc)
+            , expression_node()
+            , m_val(std::move(val))
+        {
+        }
+
+        boolean_node(shared_expression&& val)
+            : node(val->location())
+            , expression_node()
+            , m_val(std::move(val))
+        {
+        }
+
         const value_type& val() const
         {
             return m_val;

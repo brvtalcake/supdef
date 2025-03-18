@@ -165,5 +165,5 @@
         "invariant"
     ],
     "python.analysis.typeCheckingMode": "basic",
-    "C_Cpp.formatting": "disabled"
+    "C_Cpp.formatting": "default"
 }
