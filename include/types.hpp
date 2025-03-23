@@ -56,6 +56,8 @@ static_assert(
 #include <boost/function_types/parameter_types.hpp>
 #include <boost/function_types/function_arity.hpp>
 
+#include <boost/callable_traits.hpp>
+
 #include <boost/preprocessor/cat.hpp>
 
 #include <boost/pfr.hpp>
@@ -82,6 +84,7 @@ namespace hana = ::boost::hana;
 namespace mp11 = ::boost::mp11;
 namespace hof = ::boost::hof;
 namespace pfr = ::boost::pfr;
+namespace fn_traits = ::boost::callable_traits;
 
 #undef  PACKED_STRUCT
 #undef  PACKED_CLASS
@@ -1107,7 +1110,7 @@ namespace supdef
         {
             return hana::type_c<
                 std::variant<
-                    typename value_type_at<Is>()::type...
+                    typename decltype(value_type_at<Is>())::type...
                 >
             >;
         }
@@ -1172,12 +1175,186 @@ namespace supdef
 
     namespace detail
     {
-        template <typename Fn>
-        static constexpr size_t max_arity_of_fn(Fn&& fn)
+        template <size_t N, typename T>
+        static constexpr T tuple_of_n_impl_helper()
         {
-            constexpr size_t min_arity = min_arity_of_fn(fn);
+            return { };
+        }
+
+        template <typename T, size_t... Is>
+        static constexpr decltype(auto) tuple_of_n_impl(std::index_sequence<Is...>)
+        {
+            return hana::make_tuple(
+                tuple_of_n_impl_helper<Is, T>()...
+            );
+        }
+
+        template <size_t Count, typename T>
+        static constexpr decltype(auto) tuple_of_n()
+        {
+            return tuple_of_n_impl<T>(std::make_index_sequence<Count>{});
+        }
+
+        struct can_convert_to_anything
+        {
+            template <typename T>
+            operator T() const;
+        };
+
+        template <typename Fn>
+        static consteval decltype(auto) min_arity_of_fn(Fn&&)
+        {
+            using namespace hana::literals;
+
+            constexpr auto is_invocable_with = hana::is_valid(
+                [](auto&&... args)
+                    -> decltype(std::declval<Fn&&>()(std::forward<decltype(args)>(args)...))
+                { return { }; }
+            );
+
+            constexpr auto pred = [is_invocable_with] (auto st) constexpr {
+                constexpr auto max_arity = hana::size_c<100>;
+                constexpr hana::tuple invoc_args = tuple_of_n<
+                    size_t(st), can_convert_to_anything
+                >();
+                return hana::and_(
+                    hana::less.than(max_arity)(st),
+                    hana::not_(hana::unpack(invoc_args, is_invocable_with))
+                );
+            };
+
+            constexpr auto do_inc = [](auto st) constexpr {
+                return st + hana::size_c<1>;
+            };
+
+            constexpr auto state = hana::size_c<0>;
+            constexpr auto ret = hana::while_(pred, state, do_inc);
+
+            return ret;
+        }
+
+        static_assert(
+            decltype(
+                min_arity_of_fn([](int, int) { return 0; })
+            )::value == 2,
+            "min_arity_of_fn is broken"
+        );
+        static_assert(
+            decltype(
+                min_arity_of_fn([](int, int, ...) { return 0; })
+            )::value == 2,
+            "min_arity_of_fn is broken"
+        );
+        static_assert(
+            decltype(
+                min_arity_of_fn(BOOST_HOF_LIFT([](int, int) { return 0; }))
+            )::value == 2,
+            "min_arity_of_fn is broken"
+        );
+        static_assert(
+            decltype(
+                min_arity_of_fn(BOOST_HOF_LIFT([](int, int, ...) { return 0; }))
+            )::value == 2,
+            "min_arity_of_fn is broken"
+        );
+
+        template <typename Fn>
+        static consteval decltype(auto) max_arity_of_fn(size_t min_arity, Fn&&)
+        {
+            if constexpr (min_arity >= 100)
+                return 100;
+
+            using namespace hana::literals;
+
+            constexpr auto is_invocable_with = hana::is_valid(
+                [](auto&&... args)
+                    -> decltype(std::declval<Fn&&>()(std::forward<decltype(args)>(args)...))
+                { return { }; }
+            );
+
+            constexpr auto pred = [is_invocable_with] (auto st) constexpr {
+                constexpr auto max_arity = hana::size_c<100>;
+                constexpr hana::tuple invoc_args = tuple_of_n<
+                    size_t(st), can_convert_to_anything
+                >();
+                return hana::and_(
+                    hana::less.than(max_arity)(st),
+                    hana::unpack(invoc_args, is_invocable_with)
+                );
+            };
+
+            constexpr auto do_inc = [](auto st) constexpr {
+                return st + hana::size_c<1>;
+            };
+
+            constexpr auto state = hana::size_c<min_arity>;
+            constexpr auto ret = hana::while_(pred, state, do_inc);
+
+            return ret;
+        }
+
+        template <typename Fn>
+        static constexpr std::pair<size_t, size_t> do_arity_impl(Fn&& fn)
+        {
+            constexpr size_t min_arity = decltype(min_arity_of_fn(std::forward<Fn>(fn)))::value;
+            constexpr size_t max_arity = decltype(max_arity_of_fn(min_arity, std::forward<Fn>(fn)))::value;
+            return { min_arity, max_arity >= 100 ? (size_t)-1 : max_arity };
+        }
+        
+
+        template <typename Fn>
+            requires requires {
+                typename fn_traits::has_varargs<Fn>;
+            }
+        static constexpr std::pair<size_t, size_t> do_arity_impl(Fn&& fn)
+        {
+            constexpr size_t min_arity = decltype(min_arity_of_fn(std::forward<Fn>(fn)))::value;
+            constexpr size_t max_arity = !fn_traits::has_varargs_v<Fn>
+                                       ? decltype(max_arity_of_fn(min_arity, std::forward<Fn>(fn)))::value
+                                       : (size_t)-1;
+            return { min_arity, max_arity };
         }
     }
+
+    struct arity
+    {
+        std::pair<size_t, size_t> value;
+        size_t min;
+        size_t max;
+        bool is_unbounded;
+
+        template <typename Fn>
+        constexpr arity(Fn&& fn) noexcept
+            : value(detail::do_arity_impl(std::forward<Fn>(fn)))
+            , min(value.first)
+            , max(value.second)
+            , is_unbounded(max == (size_t)-1)
+        {
+        }
+    };
+
+    template <typename Fn>
+    static constexpr arity arity_of(Fn&& fn)
+    {
+        return arity(std::forward<Fn>(fn));
+    }
+
+    static_assert(
+        arity_of([](int, int) { return 0; }).value == std::pair<size_t, size_t>{ 2, 2 },
+        "arity_of is broken"
+    );
+    static_assert(
+        arity_of([](int, int, ...) { return 0; }).value == std::pair<size_t, size_t>{ 2, (size_t)-1 },
+        "arity_of is broken"
+    );
+    static_assert(
+        arity_of(BOOST_HOF_LIFT([](int, int) { return 0; })).value == std::pair<size_t, size_t>{ 2, 2 },
+        "arity_of is broken"
+    );
+    static_assert(
+        arity_of(BOOST_HOF_LIFT([](int, int, ...) { return 0; })).value == std::pair<size_t, size_t>{ 2, (size_t)-1 },
+        "arity_of is broken"
+    );
 }
 namespace detail
 {

@@ -513,70 +513,70 @@ inline constexpr auto expression_parsers_table = hana::make_map(
         hana::type_c<supdef::ast::boolean_node>,
         hana::make_tuple(
             supdef::ast::node::kind::boolean,
-            hana::just(BOOST_HOF_LIFT(parse_boolean))
+            BOOST_HOF_LIFT(parse_boolean)
         )
     ),
     hana::make_pair(
         hana::type_c<supdef::ast::integer_node>,
         hana::make_tuple(
             supdef::ast::node::kind::integer,
-            hana::just(BOOST_HOF_LIFT(parse_integer))
+            BOOST_HOF_LIFT(parse_integer)
         )
     ),
     hana::make_pair(
         hana::type_c<supdef::ast::floating_node>,
         hana::make_tuple(
             supdef::ast::node::kind::floating,
-            hana::just(BOOST_HOF_LIFT(parse_floating))
+            BOOST_HOF_LIFT(parse_floating)
         )
     ),
     hana::make_pair(
         hana::type_c<supdef::ast::builtin_node>,
         hana::make_tuple(
             supdef::ast::node::kind::builtin,
-            hana::just(BOOST_HOF_LIFT(parse_builtin))
+            BOOST_HOF_LIFT(parse_builtin)
         )
     ),
     hana::make_pair(
         hana::type_c<supdef::ast::varsubst_node>,
         hana::make_tuple(
             supdef::ast::node::kind::varsubst,
-            hana::just(BOOST_HOF_LIFT(parse_varsubst))
+            BOOST_HOF_LIFT(parse_varsubst)
         )
     ),
     hana::make_pair(
         hana::type_c<supdef::ast::macrocall_node>,
         hana::make_tuple(
             supdef::ast::node::kind::macrocall,
-            hana::just(BOOST_HOF_LIFT(parse_macrocall))
+            BOOST_HOF_LIFT(parse_macrocall)
         )
     ),
     hana::make_pair(
         hana::type_c<supdef::ast::unaryop_node>,
         hana::make_tuple(
             supdef::ast::node::kind::unaryop,
-            hana::just(BOOST_HOF_LIFT(parse_unaryop))
+            BOOST_HOF_LIFT(parse_unaryop)
         )
     ),
     hana::make_pair(
         hana::type_c<supdef::ast::binaryop_node>,
         hana::make_tuple(
             supdef::ast::node::kind::binaryop,
-            hana::just(BOOST_HOF_LIFT(parse_binaryop))
+            BOOST_HOF_LIFT(parse_binaryop)
         )
     ),
     hana::make_pair(
         hana::type_c<supdef::ast::string_node>,
         hana::make_tuple(
             supdef::ast::node::kind::string,
-            hana::just(BOOST_HOF_LIFT(parse_string))
+            BOOST_HOF_LIFT(parse_string)
         )
     ),
     hana::make_pair(
         hana::type_c<supdef::ast::list_node>,
         hana::make_tuple(
             supdef::ast::node::kind::list,
-            hana::just(BOOST_HOF_LIFT(parse_list))
+            BOOST_HOF_LIFT(parse_list)
         )
     )
 );
@@ -665,11 +665,64 @@ parse_expr_common(
             )
         );
     };
-    for (const auto& [ic, tp] : type_list)
+    constexpr auto noop = [](auto&&...) { throw std::logic_error("shouldn't be called"); };
+    auto visiting_lambda = [&](auto&& tp) {
+        constexpr size_t index = decltype(ic)::value;
+        using type_container = decltype(tp);
+        using type = typename type_container::type;
+        constexpr auto parser = expression_parsers_table[type_container{}].value_or(
+            hana::make_tuple(ast::node::kind::unknown, BOOST_HOF_LIFT(noop))
+        )[1_c];
+        constexpr auto kind = expression_parsers_table[type_container{}].value_or(
+            hana::make_tuple(ast::node::kind::unknown, BOOST_HOF_LIFT(noop))
+        )[0_c];
+        constexpr auto arity_info = supdef::arity_of(parser);
+        if (arity_info.max == 5)
+        {
+            parse_result<type> maybe_X = parser(it, begin, end, allow_non_constant, allow_coercion);
+            if (maybe_X)
+                return mk_ok_ret(std::move(maybe_X));
+            else
+                errors.push_back(std::make_pair(kind, std::move(maybe_X).error()));
+        }
+        else
+        {
+            parse_result<type> maybe_X = parser(it, begin, end);
+            if (maybe_X)
+                return mk_ok_ret(std::move(maybe_X));
+            else
+                errors.push_back(std::make_pair(kind, std::move(maybe_X).error()));
+        }
+    };
+    for (const auto& var : std::move(type_list))
     {
-        constexpr size_t index = ic::value;
-        using type = typename decltype(tp)::type;
+        auto ret = std::visit(visiting_lambda, var);
+        if (ret)
+            return ret;
     }
+    if (allow_coercion)
+    {
+        for (const auto& var : std::move(type_list_if_coerce))
+        {
+            auto ret = std::visit(visiting_lambda, var);
+            if (ret)
+                return ret;
+        }
+    }
+    if (allow_non_constant)
+    {
+        for (const auto& var : std::move(type_list_if_non_const))
+        {
+            auto ret = std::visit(visiting_lambda, var);
+            if (ret)
+                return ret;
+        }
+    }
+    return mk_recursive_parse_error(
+        ast::node::kind::expression,
+        "please provide a valid expression",
+        errors, std::make_optional(it->loc)
+    );
 }
 
 static parse_result<supdef::ast::boolean_node>

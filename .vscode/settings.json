@@ -146,7 +146,7 @@
     "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
     "C_Cpp.intelliSenseCacheSize": 10240,
     "C_Cpp.intelliSenseMemoryLimit": 8192,
-    "C_Cpp.workspaceParsingPriority": "low",
+    "C_Cpp.workspaceParsingPriority": "highest",
     "C_Cpp.doxygen.generatedStyle": "/**",
     "C_Cpp.doxygen.generateOnType": true,
     "C_Cpp.doxygen.sectionTags": [
