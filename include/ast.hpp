@@ -244,6 +244,8 @@ namespace supdef
 #pragma pop_macro("IS")
 #pragma pop_macro("INDEX")
 
+        std::string description_string(node::kind k);
+
         namespace detail
         {
             namespace test
@@ -262,6 +264,8 @@ namespace supdef
 static_assert(supdef::ast::detail::test::all_node_kinds_have_unique_values());
 
 #include <impl/ast-nodes/bases.tpp>
+
+#include <impl/ast-nodes/text.tpp>
 
 #include <impl/ast-nodes/import.tpp>
 #include <impl/ast-nodes/supdef.tpp>
@@ -287,8 +291,6 @@ static_assert(supdef::ast::detail::test::all_node_kinds_have_unique_values());
 #include <impl/ast-nodes/floating.tpp>
 #include <impl/ast-nodes/boolean.tpp>
 #include <impl/ast-nodes/list.tpp>
-
-#include <impl/ast-nodes/text.tpp>
 
 namespace supdef::ast
 {
@@ -316,9 +318,14 @@ namespace supdef::ast
         {
         }
 
-        const ::supdef::token_loc& location() const
+        const ::supdef::token_loc& location() const &
         {
             return m_loc;
+        }
+
+        ::supdef::token_loc&& location() &&
+        {
+            return std::move(m_loc);
         }
 
         const std::string& message() const

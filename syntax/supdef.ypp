@@ -1,0 +1,17 @@
+%{
+#include <types.hpp>
+#include <tokenizer.hpp>
+#include <printer.hpp>
+#include <parser.hpp>
+#include <ast.hpp>
+%}
+
+%require "3.2"
+%language "c++"
+%define api.namespace {supdef::bison}
+%define api.pure full
+
+%%
+// The grammar
+
+%%

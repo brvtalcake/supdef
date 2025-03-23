@@ -1,0 +1,2 @@
+import-statement = "@" horiz-space* "import" horiz-space+ (angle-path | string-path);
+horiz-space = (" " | "\t");

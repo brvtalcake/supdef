@@ -2,36 +2,21 @@
 #define CKD_ARITH_HPP
 
 #include <types.hpp>
-
-#include <version>
-#if __cpp_lib_saturation_arithmetic >= 202311L
-    #include <numeric>
-#endif
-#include <utility>
-#include <stdexcept>
-#include <string>
-#include <string_view>
-#include <optional>
-#include <memory>
-#include <algorithm>
-#include <functional>
-#include <concepts>
-#include <type_traits>
+#include "ckd_arith_fwd.hpp"
 
 #include <stdckdint.h>
-
 #include <cstdbool>
 
 namespace supdef
 {
-#undef  __CKD_ARITH_DECL
-#define __CKD_ARITH_DECL(op)                                        \
-    __CKD_ARITH_DECL_NOEXCEPT(op);                                  \
-    __CKD_ARITH_DECL_THROWING(op);                                  \
+#undef  __CKD_ARITH_DEF
+#define __CKD_ARITH_DEF(op)                                        \
+    __CKD_ARITH_DEF_NOEXCEPT(op);                                  \
+    __CKD_ARITH_DEF_THROWING(op);                                  \
     /**/
 
-#undef  __CKD_ARITH_DECL_NOEXCEPT
-#define __CKD_ARITH_DECL_NOEXCEPT(op)                               \
+#undef  __CKD_ARITH_DEF_NOEXCEPT
+#define __CKD_ARITH_DEF_NOEXCEPT(op)                                \
     template <std::integral RetT, std::integral T, std::integral U> \
     constexpr bool checked_##op(RetT* ret, T a, U b) noexcept       \
     {                                                               \
@@ -44,8 +29,8 @@ namespace supdef
     }                                                               \
     /**/
 
-#undef  __CKD_ARITH_DECL_THROWING
-#define __CKD_ARITH_DECL_THROWING(op)                               \
+#undef  __CKD_ARITH_DEF_THROWING
+#define __CKD_ARITH_DEF_THROWING(op)                                \
     template <std::integral T, std::integral U>                     \
     constexpr auto checked_##op(T a, U b)                           \
         -> std::common_type_t<T, U>                                 \
@@ -62,16 +47,13 @@ namespace supdef
     }                                                               \
     /**/
 
-    __CKD_ARITH_DECL(add);
-    __CKD_ARITH_DECL(sub);
-    __CKD_ARITH_DECL(mul);
+    __CKD_ARITH_DEF(add);
+    __CKD_ARITH_DEF(sub);
+    __CKD_ARITH_DEF(mul);
 
-#undef __CKD_ARITH_DECL
-#undef __CKD_ARITH_DECL_NOEXCEPT
-#undef __CKD_ARITH_DECL_THROWING
-#undef ckd_add
-#undef ckd_sub
-#undef ckd_mul
+#undef __CKD_ARITH_DEF
+#undef __CKD_ARITH_DEF_NOEXCEPT
+#undef __CKD_ARITH_DEF_THROWING
 
     namespace detail
     {
@@ -110,6 +92,52 @@ namespace supdef
             );
         return ret;
     }
+
+    /*
+    namespace detail
+    {
+        // lvalue
+        template <typename, typename T, typename StripedT = std::remove_reference_t<T>>
+        constexpr T&& forward_to_if_noexcept(StripedT& val) noexcept
+        {
+            static_assert(std::is_lvalue_reference_v<T>);
+            static_assert(std::is_lvalue_reference_v<T&&>);
+            return static_cast<T&&>(val);
+        }
+
+        // rvalue
+        template <typename ToT, typename T, typename StripedT = std::remove_reference_t<T>>
+        constexpr decltype(auto) forward_to_if_noexcept(StripedT&& val) noexcept
+        {
+            static_assert(std::is_rvalue_reference_v<T>);
+            static_assert(std::is_rvalue_reference_v<T&&>);
+
+            using cond_t = std::conjunction<
+                std::negation<
+                    std::is_nothrow_constructible<ToT, StripedT&&>
+                >, std::is_constructible<ToT, StripedT&>
+            >;
+            using cast_t = std::conditional_t<cond_t::value, StripedT&, StripedT&&>;
+
+            return static_cast<cast_t>(val);
+        }
+    }
+
+    template <std::integral NumT>
+    class checked_int
+    {
+    public:
+        using value_type = NumT;
+
+        constexpr checked_int() noexcept = default;
+
+        template <std::convertible_to<NumT> T>
+        constexpr checked_int(T&& val) noexcept(std::is_nothrow_constructible_v<NumT, T>)
+            : m_val(detail::forward_to_if_noexcept<NumT, T>(val))
+        {
+        }
+    };
+    */
 
     namespace detail
     {

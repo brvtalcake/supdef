@@ -66,7 +66,7 @@ namespace supdef::ast
                     using helper_type = helper<decltype(val)>;
 
                     if constexpr (std::same_as<typename helper_type::unqual_val_t, ::supdef::bigfloat>)
-                        return val.as<bool>();
+                        return val.template as<bool>();
                     else if constexpr (std::derived_from<typename helper_type::boxed_t, expression_node>)
                         return val->coerce_to_boolean();
                     throw std::logic_error("unreachable");
@@ -84,7 +84,7 @@ namespace supdef::ast
                     using helper_type = helper<decltype(val)>;
 
                     if constexpr (std::same_as<typename helper_type::unqual_val_t, ::supdef::bigfloat>)
-                        return val.as<supdef::bigint>();
+                        return val.template as<supdef::bigint>();
                     else if constexpr (std::derived_from<typename helper_type::boxed_t, expression_node>)
                         return val->coerce_to_integer();
                     throw std::logic_error("unreachable");

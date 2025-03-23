@@ -1,3 +1,7 @@
+#ifdef __INTELLISENSE__
+#include <types.hpp>
+#endif
+
 namespace supdef::ast
 {
     class directive_node
@@ -34,10 +38,7 @@ namespace supdef::ast
         : public virtual node
     {
     protected:
-        expression_node()
-        {
-            supdef::bigfloat::set_precision(256);
-        }
+        expression_node() = default;
 
         // This function is called by the coercion functions to ensure that the
         // coercion is only done on constant expressions.
@@ -112,9 +113,68 @@ namespace supdef::ast
             using val_t = ValT;
             using unqual_val_t = std::remove_cvref_t<val_t>;
                 
-            constexpr bool is_box = supdef::has_boxed_type<val_t>;
+            static constexpr bool is_box = supdef::has_boxed_type<val_t>;
             struct unused_local_type {};
-            using boxed_t = std::conditional_t<is_box, std::remove_cvref_t<supdef::boxed_type_t<val_t>>, unused_local_type>;
+            using boxed_t = typename decltype(
+                hana::if_(
+                    hana::bool_c<is_box>,
+                    [](auto t) {
+                        return hana::type_c<
+                            std::remove_cvref_t<
+                                supdef::boxed_type_t<
+                                    typename decltype(t)::type
+                                >
+                            >
+                        >;
+                    },
+                    [](auto) {
+                        return hana::type_c<unused_local_type>;
+                    }
+                )(hana::type_c<val_t>)
+            )::type;
         };
     };
 }
+
+static_assert(
+    std::same_as<
+        supdef::ast::expression_node_helper_types::helper<int>::boxed_t,
+        supdef::ast::expression_node_helper_types::helper<int>::unused_local_type
+    >, "supdef::ast::expression_node_helper_types::helper is broken"
+);
+static_assert(
+    std::same_as<
+        supdef::ast::expression_node_helper_types::helper<int[]>::boxed_t,
+        int
+    >, "supdef::ast::expression_node_helper_types::helper is broken"
+);
+static_assert(
+    std::same_as<
+        supdef::ast::expression_node_helper_types::helper<int[5]>::boxed_t,
+        int
+    >, "supdef::ast::expression_node_helper_types::helper is broken"
+);
+static_assert(
+    std::same_as<
+        supdef::ast::expression_node_helper_types::helper<int*>::boxed_t,
+        int
+    >, "supdef::ast::expression_node_helper_types::helper is broken"
+);
+static_assert(
+    std::same_as<
+        supdef::ast::expression_node_helper_types::helper<int**>::boxed_t,
+        int*
+    >, "supdef::ast::expression_node_helper_types::helper is broken"
+);
+static_assert(
+    std::same_as<
+        typename supdef::ast::expression_node_helper_types::helper<supdef::shared_ptr<int>>::boxed_t,
+        int
+    >, "supdef::ast::expression_node_helper_types::helper is broken"
+);
+static_assert(
+    std::same_as<
+        typename supdef::ast::expression_node_helper_types::helper<supdef::shared_ptr<int[]>>::boxed_t,
+        int
+    >, "supdef::ast::expression_node_helper_types::helper is broken"
+);

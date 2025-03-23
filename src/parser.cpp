@@ -80,7 +80,10 @@ void ::supdef::parser::do_stage2()
             }
             if (next_token->kind == token_kind::newline)
             {
-                m_tokens.erase(next_token);
+                auto line_start_token = std::next(next_token);
+                assert(line_start_token != m_tokens.end() && line_start_token->kind == token_kind::line_start);
+                // erase from next_token to line_start_token (both included)
+                m_tokens.erase(next_token, std::next(line_start_token));
                 token->kind = token_kind::horizontal_whitespace;
                 token->data = U" ";
                 token->loc.toksize = 1;

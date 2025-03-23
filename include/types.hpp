@@ -3,19 +3,9 @@
 
 #include <version.hpp>
 
-#include <concepts>
-#include <type_traits>
-#include <source_location>
-#include <filesystem>
-#include <ranges>
-#include <map>
-#include <unordered_map>
-#include <set>
-#include <unordered_set>
-#include <algorithm>
+#include <bits/stdc++.h>
+#include <bits/extc++.h>
 #include <execution>
-#include <cstddef>
-#include <cstdint>
 
 #include <boost/preprocessor/config/config.hpp>
 static_assert(
@@ -28,6 +18,10 @@ static_assert(
 );
 
 #include <boost/multiprecision/gmp.hpp>
+#include <boost/multiprecision/mpfr.hpp>
+#include <boost/multiprecision/mpfi.hpp>
+#include <boost/multiprecision/mpc.hpp>
+#include <boost/multiprecision/number.hpp>
 
 #include <boost/utility/identity_type.hpp>
 
@@ -44,8 +38,9 @@ static_assert(
 
 #include <boost/pool/pool.hpp>
 
-#include <boost/mpl/for_each.hpp>
 #include <boost/mpl/vector.hpp>
+#include <boost/mpl/contains.hpp>
+#include <boost/mpl/for_each.hpp>
 #include <boost/mpl/transform.hpp>
 
 #include <boost/hana.hpp>
@@ -76,6 +71,7 @@ namespace stdranges = ::std::ranges;
 namespace stdviews = ::std::views;
 namespace stdx = ::std::experimental;
 namespace gnucxx = ::__gnu_cxx;
+namespace pbds = ::__gnu_pbds;
 
 namespace booststl = ::boost::stl_interfaces;
 namespace boostmp  = ::boost::multiprecision;
@@ -85,7 +81,6 @@ namespace mpl = ::boost::mpl;
 namespace hana = ::boost::hana;
 namespace mp11 = ::boost::mp11;
 namespace hof = ::boost::hof;
-namespace pool = ::boost::pool;
 namespace pfr = ::boost::pfr;
 
 #undef  PACKED_STRUCT
@@ -128,10 +123,57 @@ namespace pfr = ::boost::pfr;
 //    !is_expression_valid(1 + std::pair{1, 2})::value,
 //    "1 + std::pair{1, 2} is a valid expression"
 //);
-    
+
+namespace supdef { namespace detail { } }
+
+namespace sd = ::supdef;
+
+#include <detail/ckd_arith_fwd.hpp>
 
 namespace supdef
 {
+    template <bool Cond, typename T>
+    struct add_const_if
+    {
+        using type = T;
+    };
+
+    template <typename T>
+    struct add_const_if<true, T>
+    {
+        using type = std::add_const_t<T>;
+    };
+
+    template <bool Cond, typename T>
+    struct add_volatile_if
+    {
+        using type = T;
+    };
+
+    template <typename T>
+    struct add_volatile_if<true, T>
+    {
+        using type = std::add_volatile_t<T>;
+    };
+
+    template <bool Cond, typename T>
+    using add_const_if_t = typename add_const_if<Cond, T>::type;
+
+    template <bool Cond, typename T>
+    using add_volatile_if_t = typename add_volatile_if<Cond, T>::type;
+
+    namespace detail
+    {
+        template <typename HashedType, size_t HashSize>
+        class xxhash;
+    }
+
+#undef  SAFE_STATIC
+#if SUPDEF_MULTITHREADED
+# define SAFE_STATIC static thread_local
+#else
+# define SAFE_STATIC static
+#endif
     template <typename T>
     concept reflectable = pfr::is_implicitly_reflectable_v<std::remove_reference_t<T>, void>;
 
@@ -157,62 +199,61 @@ namespace supdef
         >;
     };
 
+    namespace detail
+    {
+        struct copy_cv_from_impl_base
+        {
+            enum class add
+            {
+                none, lref, rref
+            };
+
+            template <typename T>
+            static consteval add get_add()
+            {
+                if constexpr (std::is_lvalue_reference_v<T>)
+                    return add::lref;
+                else if constexpr (std::is_rvalue_reference_v<T>)
+                    return add::rref;
+                else
+                    return add::none;
+            }
+        };
+
+        template <typename FromT, typename ToT>
+        struct copy_cv_from_impl
+            : public copy_cv_from_impl_base
+        {
+            using raw_type = add_const_if_t<
+                std::is_const_v<FromT>,
+                add_volatile_if_t<
+                    std::is_volatile_v<FromT>,
+                    std::remove_cv_t<ToT>
+                >
+            >;
+
+            template <add What>
+            using type = std::conditional_t<
+                What == add::none,
+                raw_type,
+                std::conditional_t<
+                    What == add::lref,
+                    std::add_lvalue_reference_t<raw_type>,
+                    std::add_rvalue_reference_t<raw_type>
+                >
+            >;
+        };
+    }
+
     template <typename FromT, typename ToT>
     struct copy_cv_from
     {
-        using type = std::remove_cv_t<ToT>;
-    };
-
-    template <typename FromT, typename ToT>
-    struct copy_cv_from<FromT const, ToT>
-    {
-        using type = std::add_const_t<
-            std::remove_cv_t<ToT>
+        using type = typename detail::copy_cv_from_impl<
+            std::remove_reference_t<FromT>,
+            std::remove_reference_t<ToT>
+        >::template type<
+            detail::copy_cv_from_impl_base::get_add<ToT>()
         >;
-    };
-
-    template <typename FromT, typename ToT>
-    struct copy_cv_from<FromT volatile, ToT>
-    {
-        using type = std::add_volatile_t<
-            std::remove_cv_t<ToT>
-        >;
-    };
-
-    template <typename FromT, typename ToT>
-    struct copy_cv_from<FromT const volatile, ToT>
-    {
-        using type = std::add_cv_t<
-            std::remove_cv_t<ToT>
-        >;
-    };
-
-    template <typename FromT, typename ToT>
-    struct copy_cv_from<FromT, ToT&>
-    {
-        using type = std::add_lvalue_reference_t<
-            typename copy_cv_from<FromT, ToT>::type
-        >;
-    };
-
-    template <typename FromT, typename ToT>
-    struct copy_cv_from<FromT, ToT&&>
-    {
-        using type = std::add_rvalue_reference_t<
-            typename copy_cv_from<FromT, ToT>::type
-        >;
-    };
-
-    template <typename FromT, typename ToT>
-    struct copy_cv_from<FromT&, ToT>
-        : public copy_cv_from<FromT, ToT>
-    {
-    };
-
-    template <typename FromT, typename ToT>
-    struct copy_cv_from<FromT&&, ToT>
-        : public copy_cv_from<FromT, ToT>
-    {
     };
 
     template <typename FromT, typename ToT>
@@ -259,13 +300,14 @@ namespace supdef
     }
 
     template <size_t N, typename... Ts>
-        requires (N < sizeof...(Ts))
+        requires (N < sizeof...(Ts)) && (sizeof...(Ts) > 0)
     struct nth_type
     {
-        using type = typename nth_type_impl<N, Ts...>::type;
+        using type = typename detail::nth_type_impl<N, Ts...>::type;
     };
 
     template <size_t N, typename... Ts>
+        requires (N < sizeof...(Ts)) && (sizeof...(Ts) > 0)
     using nth_type_t = typename nth_type<N, Ts...>::type;
 
     template <size_t, typename>
@@ -333,6 +375,11 @@ namespace supdef
     {
         return requires { typename std::void_t<decltype(sizeof(T))>; };
     }
+
+    static_assert(
+        is_type_complete<int>(),
+        "`bool is_type_complete<T>()` is broken"
+    );
 
     template <class... Ts>
     struct overloaded : Ts...
@@ -421,15 +468,37 @@ namespace supdef
 
     using bigint_base = boostmp::mpz_int;
     using bigfloat_base = boostmp::mpfr_float;
-    using bigdecimal_base = boostmp::mpq_rational;
+    using bigrational_base = boostmp::mpq_rational;
     using bigcomplex_base = boostmp::mpfi_float;
+
+    static_assert(
+        std::bool_constant<
+            is_type_complete<bigint_base>()
+        >::value && std::bool_constant<
+            is_type_complete<bigfloat_base>()
+        >::value && std::bool_constant<
+            is_type_complete<bigrational_base>()
+        >::value && std::bool_constant<
+            is_type_complete<bigcomplex_base>()
+        >::value,
+        "missed one boost::multiprecision include"
+    );
 
     struct big_numbers_base
     {
         template <typename T, typename Self>
+            requires std::constructible_from<T, Self&&>
         constexpr T as(this Self&& self)
         {
-            return static_cast<T>(self);
+            return T{std::forward<Self>(self)};
+        }
+
+        template <typename T, typename Self>
+            requires (!std::constructible_from<T, Self&&> &&
+                       std::convertible_to<Self&&, T>)
+        constexpr T as(this Self&& self)
+        {
+            return static_cast<T>(std::forward<Self>(self));
         }
     };
 
@@ -447,12 +516,25 @@ namespace supdef
         using bigfloat_base::bigfloat_base;
     };
 
-    struct bigdecimal
+    struct bigrational
         : public virtual big_numbers_base
-        , public bigdecimal_base
+        , public bigrational_base
     {
-        using bigdecimal_base::bigdecimal_base;
+        using bigrational_base::bigrational_base;
+
+        template <typename FwdT1, typename FwdT2>
+            requires std::derived_from<std::remove_reference_t<FwdT1>, big_numbers_base> &&
+                     std::derived_from<std::remove_reference_t<FwdT2>, big_numbers_base>
+        static constexpr bigrational from(FwdT1&& num, FwdT2&& den);
     };
+
+    template <typename FwdT1, typename FwdT2>
+        requires std::derived_from<std::remove_reference_t<FwdT1>, big_numbers_base> &&
+                 std::derived_from<std::remove_reference_t<FwdT2>, big_numbers_base>
+    constexpr bigrational bigrational::from(FwdT1&& num, FwdT2&& den)
+    {
+        return std::forward<FwdT1>(num).template as<bigrational>() / std::forward<FwdT2>(den).template as<bigrational>();
+    }
 
     struct bigcomplex
         : public virtual big_numbers_base
@@ -461,84 +543,95 @@ namespace supdef
         using bigcomplex_base::bigcomplex_base;
     };
 
+    struct bigdenom;
+
     // big numerator
-    struct bignum : bigint
+    struct bignum
+        : public bigint
     {
         using bigint::bigint;
 
-        constexpr bigdecimal operator/(const bigint& rhs) const
-        {
-            return bigdecimal(*this) / rhs;
-        }
+        template <typename Self, typename T>
+            requires std::same_as<std::remove_cvref_t<T>, bigdenom>
+        constexpr bigrational operator/(this Self&& self, T&& rhs);
     };
+
     // big denominator
-    struct bigdenom : bigint
+    struct bigdenom
+        : public bigint
     {
         using bigint::bigint;
     };
+
+    template <typename Self, typename T>
+        requires std::same_as<std::remove_cvref_t<T>, bigdenom>
+    constexpr bigrational bignum::operator/(this Self&& self, T&& rhs)
+    {
+        return bigrational::from(std::forward<Self>(self), std::forward<T>(rhs));
+    }
 
     template <char... Chars>
-    consteval bigint operator""_bigint()
+    constexpr bigint operator""_bigint()
     {
-        char str[] = {Chars..., '\0'};
-        return bigint(std::string_view{str});
+        constexpr char str[sizeof...(Chars) + 1] = {Chars..., '\0'};
+        return bigint(std::string_view{str, sizeof...(Chars)});
     }
-    consteval bigint operator""_bigint(const char* str, size_t len)
+    constexpr bigint operator""_bigint(const char* str, size_t len)
     {
         return bigint(std::string_view{str, len});
     }
 
     template <char... Chars>
-    consteval bigfloat operator""_bigfloat()
+    constexpr bigfloat operator""_bigfloat()
     {
-        char str[] = {Chars..., '\0'};
-        return bigfloat(std::string_view{str});
+        constexpr char str[sizeof...(Chars) + 1] = {Chars..., '\0'};
+        return bigfloat(std::string_view{str, sizeof...(Chars)});
     }
-    consteval bigfloat operator""_bigfloat(const char* str, size_t len)
+    constexpr bigfloat operator""_bigfloat(const char* str, size_t len)
     {
         return bigfloat(std::string_view{str, len});
     }
 
     template <char... Chars>
-    consteval bigdecimal operator""_bigdec()
+    constexpr bigrational operator""_bigratio()
     {
-        char str[] = {Chars..., '\0'};
-        return bigdecimal(std::string_view{str});
+        constexpr char str[sizeof...(Chars) + 1] = {Chars..., '\0'};
+        return bigrational(std::string_view{str, sizeof...(Chars)});
     }
-    consteval bigdecimal operator""_bigdec(const char* str, size_t len)
+    constexpr bigrational operator""_bigratio(const char* str, size_t len)
     {
-        return bigdecimal(std::string_view{str, len});
+        return bigrational(std::string_view{str, len});
     }
 
     template <char... Chars>
-    consteval bigcomplex operator""_bigcomplex()
+    constexpr bigcomplex operator""_bigcomplex()
     {
-        char str[] = {Chars..., '\0'};
-        return bigcomplex(std::string_view{str});
+        constexpr char str[sizeof...(Chars) + 1] = {Chars..., '\0'};
+        return bigcomplex(std::string_view{str, sizeof...(Chars)});
     }
-    consteval bigcomplex operator""_bigcomplex(const char* str, size_t len)
+    constexpr bigcomplex operator""_bigcomplex(const char* str, size_t len)
     {
         return bigcomplex(std::string_view{str, len});
     }
 
     template <char... Chars>
-    consteval bignum operator""_bignum()
+    constexpr bignum operator""_bignum()
     {
-        char str[] = {Chars..., '\0'};
-        return bignum(std::string_view{str});
+        constexpr char str[sizeof...(Chars) + 1] = {Chars..., '\0'};
+        return bignum(std::string_view{str, sizeof...(Chars)});
     }
-    consteval bignum operator""_bignum(const char* str, size_t len)
+    constexpr bignum operator""_bignum(const char* str, size_t len)
     {
         return bignum(std::string_view{str, len});
     }
 
     template <char... Chars>
-    consteval bigdenom operator""_bigdenom()
+    constexpr bigdenom operator""_bigdenom()
     {
-        char str[] = {Chars..., '\0'};
-        return bigdenom(std::string_view{str});
+        constexpr char str[sizeof...(Chars) + 1] = {Chars..., '\0'};
+        return bigdenom(std::string_view{str, sizeof...(Chars)});
     }
-    consteval bigdenom operator""_bigdenom(const char* str, size_t len)
+    constexpr bigdenom operator""_bigdenom(const char* str, size_t len)
     {
         return bigdenom(std::string_view{str, len});
     }
@@ -959,22 +1052,152 @@ namespace supdef
     template <typename T>
     using boxed_type_t = typename boxed_type<T>::type;
 
+    namespace detail
+    {
+        template <template <typename...> class, typename>
+        struct is_template_instance_of_impl
+            : public std::false_type
+        {
+        };
+
+        template <template <typename...> class T, typename... Args>
+        struct is_template_instance_of_impl<T, T<Args...>>
+            : public std::true_type
+        {
+        };
+
+    }
+    template <template <typename...> class TemplT, typename SpecT>
+    struct is_template_instance_of
+        : public detail::is_template_instance_of_impl<TemplT, SpecT>
+    {
+    };
+
+    template <template <typename...> class TemplT, typename SpecT>
+    inline constexpr bool is_template_instance_of_v = is_template_instance_of<TemplT, SpecT>::value;
+
+    template <typename SpecT, template <typename...> class TemplT>
+    concept specialization_of = is_template_instance_of_v<TemplT, SpecT>;
+
+    template <typename... Ts>
+    struct typelist
+    {
+    private:
+        using index_seq_type = std::index_sequence_for<Ts...>;
+
+        template <size_t N>
+        static constexpr decltype(auto) value_type_at()
+        {
+            return hana::type_c<
+                std::pair<
+                    std::integral_constant<size_t, N>,
+                    hana::type<typename nth_type<N, Ts...>::type>
+                >
+            >;
+        }
+        template <size_t N>
+        static constexpr
+        typename decltype(value_type_at<N>())::type value_at()
+        {
+            return { { }, { } };
+        }
+
+        template <size_t... Is>
+        static constexpr decltype(auto) mk_value_type(std::index_sequence<Is...>)
+        {
+            return hana::type_c<
+                std::variant<
+                    typename value_type_at<Is>()::type...
+                >
+            >;
+        }
+        template <size_t... Is>
+        static constexpr decltype(auto) mk_values(std::index_sequence<Is...>)
+        {
+            return std::array{
+                value_at<Is>()...
+            };
+        }
+    public:
+        using value_type = typename decltype(mk_value_type(std::index_sequence_for<Ts...>{}))::type;
+        static constexpr size_t size = sizeof...(Ts);
+
+        constexpr typelist()
+            : m_values{ mk_values(index_seq_type{}) }
+        {
+        }
+
+        constexpr const auto& operator[](size_t idx) const
+        {
+            return std::get<idx>(m_values);
+        }
+
+        constexpr auto begin() const
+        {
+            return m_values.begin();
+        }
+
+        constexpr auto end() const
+        {
+            return m_values.end();
+        }
+
+    private:
+        const std::array<value_type, sizeof...(Ts)> m_values;
+    };
+
+    namespace detail
+    {
+        template <typename>
+        struct is_typelist_impl
+            : public std::false_type
+        {
+        };
+
+        template <typename... Ts>
+        struct is_typelist_impl<typelist<Ts...>>
+            : public std::true_type
+        {
+        };
+    }
+
+    template <typename T>
+    struct is_typelist
+        : public detail::is_typelist_impl<T>
+    {
+    };
+
+    template <typename T>
+    inline constexpr bool is_typelist_v = is_typelist<T>::value;
+
+    namespace detail
+    {
+        template <typename Fn>
+        static constexpr size_t max_arity_of_fn(Fn&& fn)
+        {
+            constexpr size_t min_arity = min_arity_of_fn(fn);
+        }
+    }
 }
 namespace detail
 {
     namespace test
     {
-        consteval bool test_adl_static_pointer_cast()
+        consteval bool test_adl_dynamic_pointer_cast()
         {
             using namespace supdef;
 
-            struct A { char dummy; };
-            struct B : A {};
-            struct C : B {};
+            {    
+                struct A { char dummy; };
+                struct B : A {};
+                struct C : B {};
 
-            auto a = make_shared<A>();
+                auto a = make_shared<A>();
 
-            auto b = dynamic_pointer_cast<B>(a);
+                auto b = dynamic_pointer_cast<B>(a);
+            }
+
+            return false;
         }
     }
 }

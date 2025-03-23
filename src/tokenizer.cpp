@@ -740,9 +740,42 @@ namespace
         return std::nullopt;
     }
 
+    SAFE_STATIC supdef::token_kind prev_token_kind = supdef::token_kind::newline;
+
+    static maybe_state maybe_start_of_line(state& s)
+    {
+        if (prev_token_kind == supdef::token_kind::newline)
+        {
+            s.tokret = {
+                .loc = {
+                    .filename = s.filename,
+                    .line = s.line,
+                    .column = s.col,
+                    .infile_offset = __CKD_DISTANCE(infile_offset, s.start, s.next),
+                    .toksize = 0
+                },
+                .data = std::nullopt,
+                .keyword = std::nullopt,
+                .kind = supdef::token_kind::line_start
+            };
+            return std::ref(s);
+        }
+        return std::nullopt;
+    }
+
     static state& extract_next_token(state& s)
     {
+        constexpr auto do_return = [](state& s) -> state& {
+            prev_token_kind = s.tokret.kind;
+            return s;
+        };
+
         const auto next_cpy = s.next;
+
+        maybe_state is_line_start = maybe_start_of_line(s);
+        if (is_line_start.has_value())
+            return do_return(is_line_start.value());
+        s.next = next_cpy;
 
         if (s.next == s.end)
         {
@@ -760,48 +793,48 @@ namespace
                 .keyword = std::nullopt,
                 .kind = supdef::token_kind::eof
             };
-            return s;
+            return do_return(s);
         }
 
         // must be before match_punct_token
         maybe_state is_comment = match_comment(s);
         if (is_comment.has_value())
-            return is_comment.value();
+            return do_return(is_comment.value());
         s.next = next_cpy;
 
         maybe_state is_known_punct = match_punct_token(s);
         if (is_known_punct.has_value())
-            return is_known_punct.value();
+            return do_return(is_known_punct.value());
         s.next = next_cpy;
 
         maybe_state is_horizws = match_horizws(s);
         if (is_horizws.has_value())
-            return is_horizws.value();
+            return do_return(is_horizws.value());
         s.next = next_cpy;
 
         maybe_state is_newline = match_newline(s);
         if (is_newline.has_value())
-            return is_newline.value();
+            return do_return(is_newline.value());
         s.next = next_cpy;
         
         maybe_state is_lit = match_lit(s);
         if (is_lit.has_value())
-            return is_lit.value();
+            return do_return(is_lit.value());
         s.next = next_cpy;
 
         maybe_state is_backslash = match_backslash(s);
         if (is_backslash.has_value())
-            return is_backslash.value();
+            return do_return(is_backslash.value());
         s.next = next_cpy;
     
         maybe_state is_keyword = match_keyword(s);
         if (is_keyword.has_value())
-            return is_keyword.value();
+            return do_return(is_keyword.value());
         s.next = next_cpy;
 
         maybe_state is_ident = match_identifier(s);
         if (is_ident.has_value())
-            return is_ident.value();
+            return do_return(is_ident.value());
         s.next = next_cpy;
 
         s.tokret = {
@@ -817,16 +850,18 @@ namespace
             .kind = supdef::token_kind::other
         };
         s.advance();
-        return s;
+        return do_return(s);
     }
 }
 
 
 std::generator<supdef::token> supdef::tokenizer::tokenize(::supdef::shared_ptr<const stdfs::path> filename)
 {
-    auto processed_filename = filename ? filename : m_filename;
+    auto processed_filename = filename ?: m_filename;
     if (!processed_filename)
         throw std::invalid_argument("filename is required");
+    
+    prev_token_kind = supdef::token_kind::newline;
 
     state s {
         .filename = processed_filename,
@@ -871,7 +906,10 @@ std::string supdef::description_string(::supdef::token_kind kind)
     switch (kind)
     {
     case token_kind::eof:
-        desc = "(end of file)";
+        desc = "(end of file marker)";
+        break;
+    case token_kind::line_start:
+        desc = "(start of line marker)";
         break;
     case token_kind::horizontal_whitespace:
         desc = "";

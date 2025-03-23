@@ -8,11 +8,17 @@ namespace supdef::ast
             : node(t.loc)
             , m_tok(std::move(t))
         {
+            assert(m_tok.data != std::nullopt);
         }
 
         bool is_identifier() const
         {
             return m_tok.kind == token_kind::identifier;
+        }
+
+        const std::u32string& text() const
+        {
+            return *m_tok.data;
         }
 
         virtual kind node_kind() const override

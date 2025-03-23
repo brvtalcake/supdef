@@ -72,11 +72,37 @@ namespace supdef::ast
             result.push_back(U'[');
             if (!m_items.empty())
             {
-                result.append(m_items.front()->coerce_to_string());
+                result.append(
+                    std::visit(
+                        [](const auto& val) -> std::u32string {
+                            using helper_type = helper<decltype(val)>;
+
+                            if constexpr (std::same_as<typename helper_type::unqual_val_t, shared_text>)
+                                return val->text();
+                            else if constexpr (std::derived_from<typename helper_type::boxed_t, expression_node>)
+                                return val->coerce_to_string();
+                            throw std::logic_error("unreachable");
+                        },
+                        m_items.front()
+                    )
+                );
                 for (const auto& item : m_items | stdviews::drop(1))
                 {
                     result.push_back(U',');
-                    result.append(item->coerce_to_string());
+                    result.append(
+                        std::visit(
+                            [](const auto& val) -> std::u32string {
+                                using helper_type = helper<decltype(val)>;
+
+                                if constexpr (std::same_as<typename helper_type::unqual_val_t, shared_text>)
+                                    return val->text();
+                                else if constexpr (std::derived_from<typename helper_type::boxed_t, expression_node>)
+                                    return val->coerce_to_string();
+                                throw std::logic_error("unreachable");
+                            },
+                            item
+                        )
+                    );
                 }
             }
             result.push_back(U']');

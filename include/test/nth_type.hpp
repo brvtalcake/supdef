@@ -73,7 +73,7 @@ namespace supdef
 #include BOOST_PP_ITERATE()
 
 #undef  __TEST_ARGS
-#define __TEST_ARGS (int const&)(double&&, char)
+#define __TEST_ARGS (int const&)(double&&)(char)
 #define BOOST_PP_ITERATION_PARAMS_1 (3, (1, BOOST_PP_SEQ_SIZE(BOOST_PP_VARIADIC_SEQ_TO_SEQ(__TEST_ARGS)), <test/pp-iter/nth_type-test.hpp>))
 #include BOOST_PP_ITERATE()
 
@@ -91,7 +91,10 @@ namespace supdef
         std::same_as< nth_type_t<0, int const& , double&&, char >, int const& >, "\"nth_type_t<0, int const& , double&&, char\" is not \"int const&\""
     );
     static_assert(
-        std::same_as< nth_type_t<1, int const& , double&&, char >, double&&, char >, "\"nth_type_t<1, int const& , double&&, char\" is not \"double&&, char\""
+        std::same_as< nth_type_t<1, int const& , double&&, char >, double&& >, "\"nth_type_t<1, int const& , double&&, char\" is not \"double&&\""
+    );
+    static_assert(
+        std::same_as< nth_type_t<2, int const& , double&&, char >, char >, "\"nth_type_t<2, int const& , double&&, char\" is not \"char\""
     );
     static_assert(
         std::same_as< nth_type_t<0, int , double , char , std::unique_ptr<int, std::default_delete<int>> >, int >, "\"nth_type_t<0, int , double , char , std::unique_ptr<int, std::default_delete<int>>\" is not \"int\""

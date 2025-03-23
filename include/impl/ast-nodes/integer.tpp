@@ -1,7 +1,3 @@
-#include <string>
-#include <iostream>
-#include <sstream>
-
 namespace supdef::ast
 {
     class integer_node final
@@ -22,6 +18,30 @@ namespace supdef::ast
         }
         integer_node(::supdef::token_loc&& loc, const std::u32string& val)
             : node(std::move(loc))
+            , expression_node()
+            , m_val()
+        {
+            std::string str;
+            for (char32_t c : val)
+            {
+                // TODO: maybe already checked while tokenizing ?
+                const auto nval = ::supdef::unicode::numeric_value<long long>(c);
+                if (!nval.has_value() ||
+                    (long long)'0' + *nval < (long long)std::numeric_limits<char>::min() ||
+                    (long long)'0' + *nval > (long long)std::numeric_limits<char>::max())
+                    throw std::runtime_error("Invalid character in integer literal");
+                str.push_back((char)((long long)'0' + *nval));
+            }
+            m_val = ::supdef::bigint(std::move(str));
+        }
+        integer_node(const ::supdef::token_loc& loc, value_type&& val)
+            : node(loc)
+            , expression_node()
+            , m_val(std::move(val))
+        {
+        }
+        integer_node(const ::supdef::token_loc& loc, const std::u32string& val)
+            : node(loc)
             , expression_node()
             , m_val()
         {
@@ -69,7 +89,7 @@ namespace supdef::ast
                     using helper_type = helper<decltype(val)>;
 
                     if constexpr (std::same_as<typename helper_type::unqual_val_t, ::supdef::bigint>)
-                        return val.as<bool>();
+                        return val.template as<bool>();
                     else if constexpr (std::derived_from<typename helper_type::boxed_t, expression_node>)
                         return val->coerce_to_boolean();
                     throw std::logic_error("unreachable");
@@ -105,7 +125,7 @@ namespace supdef::ast
                     using helper_type = helper<decltype(val)>;
 
                     if constexpr (std::same_as<typename helper_type::unqual_val_t, ::supdef::bigint>)
-                        return val.as<::supdef::bigfloat>();
+                        return val.template as<::supdef::bigfloat>();
                     else if constexpr (std::derived_from<typename helper_type::boxed_t, expression_node>)
                         return val->coerce_to_floating();
                     throw std::logic_error("unreachable");

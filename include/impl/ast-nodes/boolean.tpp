@@ -31,6 +31,12 @@ namespace supdef::ast
         {
         }
 
+        boolean_node& operator=(shared_expression&& val)
+        {
+            m_val = std::move(val);
+            return *this;
+        }
+
         const value_type& val() const
         {
             return m_val;

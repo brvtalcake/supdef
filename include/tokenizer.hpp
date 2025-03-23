@@ -59,8 +59,9 @@ namespace supdef
         inline_comment,        // // ...
         multiline_comment,     // /* ... */
 
-        other, // any other token
-        eof    // end of file
+        other,      // any other token
+        line_start, // start of line
+        eof         // end of file
     };
 
     enum class keyword_kind
@@ -95,6 +96,13 @@ namespace supdef
 
         std::make_unsigned_t<off_t> infile_offset;
         size_t toksize;
+
+        std::string to_string() const
+        {
+            return filename->string()   + ":" +
+                   std::to_string(line) + ":" +
+                   std::to_string(column);
+        }
     };
 
     struct token

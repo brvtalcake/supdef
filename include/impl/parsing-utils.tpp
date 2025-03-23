@@ -9,19 +9,88 @@
 
 namespace
 {
+    namespace detail
+    {
+        template <typename T>
+        concept is_character_type =
+            std::same_as<std::remove_cvref_t<T>, char>     ||
+            std::same_as<std::remove_cvref_t<T>, wchar_t>  ||
+            std::same_as<std::remove_cvref_t<T>, char8_t>  ||
+            std::same_as<std::remove_cvref_t<T>, char16_t> ||
+            std::same_as<std::remove_cvref_t<T>, char32_t>;
+        
+        template <typename T>
+        concept string_view_able = requires(T t) {
+            typename std::type_identity_t<decltype(std::basic_string_view(t))>;
+            { std::basic_string_view{t} } -> supdef::specialization_of<std::basic_string_view>;
+            requires is_character_type<typename decltype(std::basic_string_view{t})::value_type>;
+        };
+
+        static_assert(std::bool_constant<string_view_able<char[]>>::value);
+        static_assert(std::bool_constant<string_view_able<char[10]>>::value);
+        static_assert(std::bool_constant<string_view_able<const char*>>::value);
+        static_assert(std::bool_constant<string_view_able<std::string>>::value);
+
+        static_assert(std::bool_constant<string_view_able<wchar_t[]>>::value);
+        static_assert(std::bool_constant<string_view_able<wchar_t[10]>>::value);
+        static_assert(std::bool_constant<string_view_able<const wchar_t*>>::value);
+        static_assert(std::bool_constant<string_view_able<std::wstring>>::value);
+
+        static_assert(std::bool_constant<string_view_able<char8_t[]>>::value);
+        static_assert(std::bool_constant<string_view_able<char8_t[10]>>::value);
+        static_assert(std::bool_constant<string_view_able<const char8_t*>>::value);
+        static_assert(std::bool_constant<string_view_able<std::u8string>>::value);
+
+        static_assert(std::bool_constant<string_view_able<char16_t[]>>::value);
+        static_assert(std::bool_constant<string_view_able<char16_t[10]>>::value);
+        static_assert(std::bool_constant<string_view_able<const char16_t*>>::value);
+        static_assert(std::bool_constant<string_view_able<std::u16string>>::value);
+
+        static_assert(std::bool_constant<string_view_able<char32_t[]>>::value);
+        static_assert(std::bool_constant<string_view_able<char32_t[10]>>::value);
+        static_assert(std::bool_constant<string_view_able<const char32_t*>>::value);
+        static_assert(std::bool_constant<string_view_able<std::u32string>>::value);
+
+        static_assert(std::bool_constant<!string_view_able<std::vector<size_t>>>::value);
+        static_assert(std::bool_constant<!string_view_able<int>>::value);
+    }
+
     template <typename CharT>
-    static constexpr inline std::basic_string<CharT> strip(
-        const std::basic_string<CharT>& str,
-        const std::basic_string<CharT>& chars
+    static constexpr inline std::basic_string_view<CharT> strip(
+        std::basic_string_view<CharT> str,
+        std::basic_string_view<CharT> chars
     ) {
         auto start = str.find_first_not_of(chars);
-        if (start == std::basic_string<CharT>::npos)
-            return std::basic_string<CharT>();
+        if (start == std::basic_string_view<CharT>::npos)
+            return {};
         auto end = str.find_last_not_of(chars);
-        if (end == std::basic_string<CharT>::npos)
-            return std::basic_string<CharT>();
+        if (end == std::basic_string_view<CharT>::npos)
+            return {};
+        if (end < start)
+            return {};
         return str.substr(start, end - start + 1);
     }
+
+    template <detail::string_view_able T1, detail::string_view_able T2>
+    static constexpr inline decltype(auto) strip(T1 str, T2 chars) {
+        return strip(std::basic_string_view(str), std::basic_string_view(chars));
+    }
+
+    static_assert(std::bool_constant<(strip("hello", " \t\n\r\v") == "hello")>::value);
+    static_assert(std::bool_constant<(strip("  hello  ", " \t\n\r\v") == "hello")>::value);
+    static_assert(std::bool_constant<(strip("  \t  \n \v\th\ne\rll\v\to\n  " , " \t\n\r\v") == "h\ne\rll\v\to")>::value);
+    
+    static_assert(std::bool_constant<(strip(u8"hello", u8" \t\n\r\v") == u8"hello")>::value);
+    static_assert(std::bool_constant<(strip(u8"  hello  ", u8" \t\n\r\v") == u8"hello")>::value);
+    static_assert(std::bool_constant<(strip(u8"  \t  \n \v\th\ne\rll\v\to\n  " , u8" \t\n\r\v") == u8"h\ne\rll\v\to")>::value);
+
+    static_assert(std::bool_constant<(strip(u"hello", u" \t\n\r\v") == u"hello")>::value);
+    static_assert(std::bool_constant<(strip(u"  hello  ", u" \t\n\r\v") == u"hello")>::value);
+    static_assert(std::bool_constant<(strip(u"  \t  \n \v\th\ne\rll\v\to\n  " , u" \t\n\r\v") == u"h\ne\rll\v\to")>::value);
+
+    static_assert(std::bool_constant<(strip(U"hello", U" \t\n\r\v") == U"hello")>::value);
+    static_assert(std::bool_constant<(strip(U"  hello  ", U" \t\n\r\v") == U"hello")>::value);
+    static_assert(std::bool_constant<(strip(U"  \t  \n \v\th\ne\rll\v\to\n  " , U" \t\n\r\v") == U"h\ne\rll\v\to")>::value);
 
     template <typename CharT>
     static constexpr inline std::basic_string<CharT> translate(
