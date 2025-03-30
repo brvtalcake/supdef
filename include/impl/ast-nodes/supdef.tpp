@@ -9,45 +9,21 @@ namespace supdef::ast
             ::supdef::token_loc&& loc,
             std::u32string&& name,
             std::vector<shared_node>&& repl
-        )   : node(std::move(loc))
-            , directive_node(false) // call to a supdef outputs, but not its definition
-            , m_name(std::move(name))
-            , m_opts()
-            , m_replacement(std::move(repl))
-        {
-        }
+        ) noexcept;
         supdef_node(
             ::supdef::token_loc&& loc,
             std::u32string&& name,
             std::map<std::u32string, std::vector<shared_node>>&& opts,
             std::vector<shared_node>&& repl
-        )   : node(std::move(loc))
-            , directive_node(false)
-            , m_name(std::move(name))
-            , m_opts(std::move(opts))
-            , m_replacement(std::move(repl))
-        {
-        }
+        ) noexcept;
 
-        const std::vector<shared_node>& replacement() const
-        {
-            return m_replacement;
-        }
+        const std::vector<shared_node>& replacement() const noexcept;
 
-        const std::map<std::u32string, std::vector<shared_node>>& opts() const
-        {
-            return m_opts;
-        }
+        const std::map<std::u32string, std::vector<shared_node>>& opts() const noexcept;
 
-        const std::u32string& name() const
-        {
-            return m_name;
-        }
+        const std::u32string& name() const noexcept;
 
-        virtual kind node_kind() const override
-        {
-            return kind::supdef;
-        }
+        virtual kind node_kind() const noexcept override;
 
     private:
         std::u32string m_name;

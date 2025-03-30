@@ -69,46 +69,32 @@ namespace supdef
             node() = default;
             virtual ~node() = default;
 
-            node(::supdef::token_loc&& loc)
-                : m_loc(std::move(loc))
-            {
-            }
-            node(const ::supdef::token_loc& loc)
-                : m_loc(loc)
-            {
-            }
+            node(::supdef::token_loc&& loc) noexcept;
+            node(const ::supdef::token_loc& loc) noexcept;
 
-            virtual kind node_kind() const
-            {
-                return kind::unknown;
-            }
+            virtual kind node_kind() const noexcept;
 
-            bool operator==(kind k) const
-            {
-                return this->is(k);
-            }
+            virtual std::ostream& do_output_to(std::ostream& os) const = 0;
+            virtual std::ostream& output_to(std::ostream& os) const;
 
-            kind operator&(kind k) const;
-            kind operator|(kind k) const;
-            kind operator^(kind k) const;
-            kind operator~() const;
+            bool operator==(kind k) const noexcept;
+
+            kind operator&(kind k) const noexcept;
+            kind operator|(kind k) const noexcept;
+            kind operator^(kind k) const noexcept;
+            kind operator~() const noexcept;
 
             template <typename Self>
             bool is(this Self&& self, kind k);
 
-            const ::supdef::token_loc& location() const &
-            {
-                return m_loc;
-            }
-            ::supdef::token_loc&& location() &&
-            {
-                return std::move(m_loc);
-            }
-            
+            const ::supdef::token_loc& location() const & noexcept;
+
+            ::supdef::token_loc&& location() && noexcept;
 
         private:
             ::supdef::token_loc m_loc;
         };
+
         class directive_node;
         class expression_node;
         class block_node;
@@ -158,20 +144,11 @@ namespace supdef
             return static_cast<node::kind>(std::to_underlying(lhs) ^ std::to_underlying(rhs));
         }
 
-        inline node::kind operator~(node::kind k) noexcept
-        {
-            return static_cast<node::kind>(~std::to_underlying(k));
-        }
+        node::kind operator~(node::kind k) noexcept;
         
-        inline node::kind operator<<(node::kind k, std::make_unsigned_t<std::underlying_type_t<node::kind>> n) noexcept
-        {
-            return static_cast<node::kind>(std::to_underlying(k) << n);
-        }
+        node::kind operator<<(node::kind k, std::make_unsigned_t<std::underlying_type_t<node::kind>> n) noexcept;
         
-        inline node::kind operator>>(node::kind k, std::make_unsigned_t<std::underlying_type_t<node::kind>> n) noexcept
-        {
-            return static_cast<node::kind>(std::to_underlying(k) >> n);
-        }
+        node::kind operator>>(node::kind k, std::make_unsigned_t<std::underlying_type_t<node::kind>> n) noexcept;
         
         template <typename LhsT, typename RhsT>
             requires valid_enum_class_op_combination<LhsT, RhsT, node::kind>
@@ -203,23 +180,6 @@ namespace supdef
         {
             return lhs = lhs >> n;
         }
-        
-        node::kind node::operator&(node::kind k) const
-        {
-            return this->node_kind() & k;
-        }
-        node::kind node::operator|(node::kind k) const
-        {
-            return this->node_kind() | k;
-        }
-        node::kind node::operator^(node::kind k) const
-        {
-            return this->node_kind() ^ k;
-        }
-        node::kind node::operator~() const
-        {
-            return ~this->node_kind();
-        }
 
         template <typename Self>
         bool node::is(this Self&& self, node::kind k)
@@ -243,6 +203,9 @@ namespace supdef
 
 #pragma pop_macro("IS")
 #pragma pop_macro("INDEX")
+
+        std::ostream& operator<<(std::ostream& os, const node::kind& k);
+        std::ostream& operator<<(std::ostream& os, const node& n);
 
         std::string description_string(node::kind k);
 
@@ -295,6 +258,7 @@ static_assert(supdef::ast::detail::test::all_node_kinds_have_unique_values());
 namespace supdef::ast
 {
     class parse_error
+        : public std::exception
     {
     public:
         parse_error(const ::supdef::token_loc& loc, const std::string& msg)

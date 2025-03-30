@@ -10,37 +10,62 @@ namespace supdef
 {
     namespace detail
     {
-        PACKED_STRUCT(mem_hdr)
+        PACKED_STRUCT(arena_mem_hdr)
         {
-            uintptr_t xord_prev_next; // previous and next headers
-            size_t before : 16;       // quantity to substract from the header's address to get the start of the managed block
-            size_t after  : 47;       // quantity to add to the header's address to get the end of the managed block
-            bool is_allocated : 1;    // whether the block is allocated or not
+            // neighbours of the block
+            // on x86-64, max virtual address is 2^57 - 1, with 5-level
+            // paging
+            // (see http://wiki.osdev.org/Paging for more details)
+            uintptr_t prev_addr : 57; // previous block address
+            uintptr_t next_addr : 57; // next block address
+            // state of the block
+            bool is_allocated   :  1; // whether the block is allocated or not
+            // user requirements
+            size_t alignment    : 29; // alignment of the block
 
-            static constexpr size_t max_alignment = (1 << 17) - 1;
-            static constexpr size_t max_size = (1 << 47) - 1;
+            static constexpr size_t max_alignment = (1u << 29) - 1;
+            static constexpr size_t max_size = (1u << 57) - 1;
+            static constexpr uintptr_t addr_mask = max_size;
 
-            constexpr std::byte* prev(std::byte* next) const noexcept
+            struct chunk_limits
             {
-                return reinterpret_cast<std::byte*>(this->xord_prev_next ^ reinterpret_cast<uintptr_t>(next));
+                std::byte* start;
+                std::byte* end;
+            };
+
+            constexpr arena_mem_hdr* prev() const noexcept
+            {
+                uintptr_t addr = this->prev_addr;
+                return reinterpret_cast<arena_mem_hdr*>(addr & addr_mask);
             }
-            constexpr std::byte* next(std::byte* prev) const noexcept
+            constexpr arena_mem_hdr* next() const noexcept
             {
-                return reinterpret_cast<std::byte*>(this->xord_prev_next ^ reinterpret_cast<uintptr_t>(prev));
+                uintptr_t addr = this->next_addr
+                return reinterpret_cast<arena_mem_hdr*>(addr & addr_mask);
             }
 
-            constexpr void set_neighbours(std::byte* prev, std::byte* next) noexcept
+            constexpr void prev(std::byte* addr) noexcept
             {
-                this->xord_prev_next = reinterpret_cast<uintptr_t>(prev) ^ reinterpret_cast<uintptr_t>(next);
+                this->prev_addr = reinterpret_cast<uintptr_t>(addr & addr_mask);
+            }
+            constexpr void next(std::byte* addr) noexcept
+            {
+                this->next_addr = reinterpret_cast<uintptr_t>(addr & addr_mask);
             }
 
-            constexpr size_t size() const noexcept
+            constexpr chunk_limits managed_area() const noexcept
             {
-                return this->before + this->after;
+                return chunk_limits{
+                    reinterpret_cast<std::byte*>(this->prev_addr + sizeof(arena_mem_hdr)),
+                    reinterpret_cast<std::byte*>(this->next_addr)
+                };
             }
-            constexpr size_t user_size() const noexcept
+            constexpr chunk_limits user_area() const noexcept
             {
-                return this->after;
+                return chunk_limits{
+                    reinterpret_cast<std::byte*>(this->prev_addr + sizeof(arena_mem_hdr)),
+                    reinterpret_cast<std::byte*>(this->next_addr - sizeof(arena_mem_hdr))
+                };
             }
 
             constexpr void mark_allocated() noexcept
@@ -55,52 +80,19 @@ namespace supdef
             {
                 this->is_allocated = !this->is_allocated;
             }
-
-            constexpr std::tuple<std::byte*, std::byte*> block(std::byte* self_addr) const noexcept
-            {
-                return std::make_tuple(
-                    self_addr - this->before,
-                    self_addr + sizeof(mem_hdr) + this->after
-                );
-            }
-            constexpr void block(std::byte* self_addr, std::byte* block_start, std::byte* block_end) noexcept
-            {
-                this->before = self_addr - block_start;
-                this->after = block_end - self_addr - sizeof(mem_hdr);
-            }
-
-            constexpr std::tuple<std::byte*, std::byte*> user(std::byte* self_addr) const noexcept
-            {
-                return std::make_tuple(
-                    self_addr + sizeof(mem_hdr),
-                    self_addr + sizeof(mem_hdr) + this->after
-                );
-            }
-
-            static constexpr mem_hdr at(std::byte* ptr) noexcept;
-            static constexpr void at(std::byte* ptr, const mem_hdr& hdr) noexcept;
-
-            static constexpr mem_hdr at(uintptr_t ptr) noexcept;
-            static constexpr void at(uintptr_t ptr, const mem_hdr& hdr) noexcept;
-
-            /*
-            * Free space before the header (but inside the same block)
-            * may be needed if the user requested alignment is so big that
-            * there needs to be some padding between the header and user data.
-            * Since we still want the header to be JUST BEFORE user data,
-            * we need to potentially let free space before it.
-            */
         };
-        static_assert(std::is_trivially_copyable_v<mem_hdr>);
-        static_assert(std::is_standard_layout_v<mem_hdr>);
-        static_assert(sizeof(mem_hdr) == 2 * 8);
+        static_assert(std::is_trivially_copyable_v<arena_mem_hdr>);
+        static_assert(std::is_standard_layout_v<arena_mem_hdr>);
+        static_assert(std::is_trivial_v<arena_mem_hdr>);
+        static_assert(std::bool_constant<sizeof(arena_mem_hdr) == 18>::value);
+        static_assert(std::alignment_of_v<arena_mem_hdr> == 8);
 
         class arena_base
         {
         protected:
             struct block_info
             {
-                mem_hdr hdr;
+                arena_mem_hdr hdr;
                 std::byte* hdr_addr;
             };
 
@@ -125,19 +117,19 @@ namespace supdef
 
             static inline constexpr uintptr_t to_header(uintptr_t start) noexcept
             {
-                return start - sizeof(mem_hdr);
+                return start - sizeof(arena_mem_hdr);
             }
 
             static inline constexpr uintptr_t to_data(uintptr_t start) noexcept
             {
-                return start + sizeof(mem_hdr);
+                return start + sizeof(arena_mem_hdr);
             }
 
             static inline constexpr std::optional<std::tuple<std::byte*, std::byte*>>
             find_suitable(const block_info& h, size_t bytes, size_t alignment) noexcept
             {
                 auto [block_start, block_end] = h.hdr.block(h.hdr_addr);
-                auto user_start = align_up(block_start + sizeof(mem_hdr), alignment);
+                auto user_start = align_up(block_start + sizeof(arena_mem_hdr), alignment);
                 if (user_start + bytes <= block_end)
                     return std::make_tuple(user_start, user_start + bytes);
                 return std::nullopt;
@@ -145,7 +137,7 @@ namespace supdef
         };
 
         template <size_t N>
-            requires (N > 2 * sizeof(mem_hdr)) && (N <= mem_hdr::max_size)
+            requires (N > 2 * sizeof(arena_mem_hdr)) && (N <= arena_mem_hdr::max_size)
         class arena_impl
             : public arena_base
         {
@@ -160,7 +152,7 @@ namespace supdef
 
             static constexpr inline bool can_split(std::byte* user_end, std::byte* block_end) noexcept
             {
-                return user_end + sizeof(mem_hdr) < block_end;
+                return user_end + sizeof(arena_mem_hdr) < block_end;
             }
 
             // allocated the block, and then if possible splits it in two
@@ -170,7 +162,7 @@ namespace supdef
                 const bool needs_split = can_split(std::get<1>(user), std::get<1>(old_blk_bounds));
 
                 block_info new_block;
-                new_block.hdr_addr = std::get<0>(user) - sizeof(mem_hdr);
+                new_block.hdr_addr = std::get<0>(user) - sizeof(arena_mem_hdr);
                 new_block.hdr = b.hdr;
                 new_block.hdr.block(
                     new_block.hdr_addr,
@@ -194,19 +186,19 @@ namespace supdef
                     );
                     next_block.hdr.mark_unallocated();
 
-                    mem_hdr old_next_hdr = mem_hdr::at(b.hdr.next(b.hdr_addr));
+                    arena_mem_hdr old_next_hdr = arena_mem_hdr::at(b.hdr.next(b.hdr_addr));
                     std::byte* old_next_hdr_old_next = old_next_hdr.next(b.hdr_addr);
                     old_next_hdr.set_neighbours(new_block.hdr_addr, old_next_hdr_old_next);
-                    mem_hdr::at(b.hdr.next(b.hdr_addr), old_next_hdr);
+                    arena_mem_hdr::at(b.hdr.next(b.hdr_addr), old_next_hdr);
 
-                    mem_hdr::at(new_block.hdr_addr, new_block.hdr);
-                    mem_hdr::at(next_block.hdr_addr, next_block.hdr);
+                    arena_mem_hdr::at(new_block.hdr_addr, new_block.hdr);
+                    arena_mem_hdr::at(next_block.hdr_addr, next_block.hdr);
 
                     return std::get<0>(user);
                 }
                 else
                 {
-                    mem_hdr::at(new_block.hdr_addr, new_block.hdr);
+                    arena_mem_hdr::at(new_block.hdr_addr, new_block.hdr);
 
                     return std::get<0>(user);
                 }
@@ -215,37 +207,37 @@ namespace supdef
         protected:
             arena_impl()
                 : m_data()
-                , m_search_from(reinterpret_cast<uintptr_t>(m_data + sizeof(mem_hdr)))
+                , m_search_from(reinterpret_cast<uintptr_t>(m_data + sizeof(arena_mem_hdr)))
                 , m_prev_search_from(reinterpret_cast<uintptr_t>(m_data))
             {
                 std::byte* prev;
                 std::byte* next;
 
-                mem_hdr first;
-                mem_hdr middle;
-                mem_hdr last;
+                arena_mem_hdr first;
+                arena_mem_hdr middle;
+                arena_mem_hdr last;
 
                 prev = nullptr;
-                next = m_data + sizeof(mem_hdr);
+                next = m_data + sizeof(arena_mem_hdr);
                 first.set_neighbours(prev, next);
                 first.block(m_data, m_data, m_data + N);
                 first.mark_allocated();
 
                 prev = m_data;
-                next = m_data + N - sizeof(mem_hdr);
+                next = m_data + N - sizeof(arena_mem_hdr);
                 middle.set_neighbours(prev, next);
-                middle.block(m_data + sizeof(mem_hdr), m_data + sizeof(mem_hdr), m_data + N - sizeof(mem_hdr));
+                middle.block(m_data + sizeof(arena_mem_hdr), m_data + sizeof(arena_mem_hdr), m_data + N - sizeof(arena_mem_hdr));
                 middle.mark_unallocated();
 
-                prev = m_data + N - 2 * sizeof(mem_hdr);
+                prev = m_data + N - 2 * sizeof(arena_mem_hdr);
                 next = nullptr;
                 last.set_neighbours(prev, next);
-                last.block(m_data + N - sizeof(mem_hdr), m_data + N - sizeof(mem_hdr), m_data + N);
+                last.block(m_data + N - sizeof(arena_mem_hdr), m_data + N - sizeof(arena_mem_hdr), m_data + N);
                 last.mark_allocated();
 
-                mem_hdr::at(m_data, hdr);
-                mem_hdr::at(m_data + sizeof(mem_hdr), middle);
-                mem_hdr::at(m_data + N - sizeof(mem_hdr), last);
+                arena_mem_hdr::at(m_data, hdr);
+                arena_mem_hdr::at(m_data + sizeof(arena_mem_hdr), middle);
+                arena_mem_hdr::at(m_data + N - sizeof(arena_mem_hdr), last);
             }
 
             ~arena_impl() = default;
@@ -263,7 +255,7 @@ namespace supdef
                 while (addr)
                 {
                     block_info b;
-                    b.hdr = mem_hdr::at(addr);
+                    b.hdr = arena_mem_hdr::at(addr);
                     b.hdr_addr = addr;
                     auto can_contain_res = can_contain(b, bytes, alignment);
                     if (can_contain_res)
@@ -283,6 +275,32 @@ namespace supdef
             std::recursive_mutex m_mutex;
 #endif
         };
+
+        constexpr arena_mem_hdr
+        arena_mem_hdr::at(std::byte* ptr) noexcept
+        {
+            arena_mem_hdr hdr;
+            ::memcpy(&hdr, ptr, sizeof(arena_mem_hdr));
+            return hdr;
+        }
+        
+        constexpr void
+        arena_mem_hdr::at(std::byte* ptr, const arena_mem_hdr& hdr) noexcept
+        {
+            ::memcpy(ptr, &hdr, sizeof(arena_mem_hdr));
+        }
+        
+        constexpr arena_mem_hdr
+        arena_mem_hdr::at(uintptr_t ptr) noexcept
+        {
+            return at(reinterpret_cast<std::byte*>(ptr));
+        }
+        
+        constexpr void
+        arena_mem_hdr::at(uintptr_t ptr, const arena_mem_hdr& hdr) noexcept
+        {
+            at(reinterpret_cast<std::byte*>(ptr), hdr);
+        }
     }
     // TODO: finish and test this
     template <size_t N>
@@ -291,32 +309,6 @@ namespace supdef
     {
         
     };
-}
-
-constexpr supdef::detail::mem_hdr
-supdef::detail::mem_hdr::at(std::byte* ptr) noexcept
-{
-    mem_hdr hdr;
-    ::memcpy(&hdr, ptr, sizeof(mem_hdr));
-    return hdr;
-}
-
-constexpr void
-supdef::detail::mem_hdr::at(std::byte* ptr, const supdef::detail::mem_hdr& hdr) noexcept
-{
-    ::memcpy(ptr, &hdr, sizeof(mem_hdr));
-}
-
-constexpr supdef::detail::mem_hdr
-supdef::detail::mem_hdr::at(uintptr_t ptr) noexcept
-{
-    return at(reinterpret_cast<std::byte*>(ptr));
-}
-
-constexpr void
-supdef::detail::mem_hdr::at(uintptr_t ptr, const supdef::detail::mem_hdr& hdr) noexcept
-{
-    at(reinterpret_cast<std::byte*>(ptr), hdr);
 }
 
 #endif

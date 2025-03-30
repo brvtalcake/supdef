@@ -20,39 +20,17 @@ namespace supdef::ast
             std::optional<interpreter::lang_identifier>&& lang,
             std::u32string&& path,
             std::vector<shared_node>&& value
-        )   : node(std::move(loc))
-            , directive_node(false)
-            , m_kind(k)
-            , m_lang(std::move(lang))
-            , m_prag(std::move(path))
-            , m_val(std::move(value))
-        {
-        }
+        ) noexcept;
 
-        pragma_kind prag_kind() const
-        {
-            return m_kind;
-        }
+        pragma_kind prag_kind() const noexcept;
 
-        const std::optional<interpreter::lang_identifier>& lang() const
-        {
-            return m_lang;
-        }
+        const std::optional<interpreter::lang_identifier>& lang() const noexcept;
 
-        const std::u32string& pragma() const
-        {
-            return m_prag;
-        }
+        const std::u32string& pragma() const noexcept;
 
-        const std::vector<shared_node>& value() const
-        {
-            return m_val;
-        }
+        const std::vector<shared_node>& value() const noexcept;
 
-        virtual kind node_kind() const override
-        {
-            return kind::pragma;
-        }
+        virtual kind node_kind() const noexcept override;
 
     private:
         pragma_kind m_kind;

@@ -5,22 +5,11 @@ namespace supdef::ast
         , public directive_node
     {
     public:
-        dump_node(::supdef::token_loc&& loc, size_t i)
-            : node(std::move(loc))
-            , directive_node(true)
-            , m_index(i)
-        {
-        }
+        dump_node(::supdef::token_loc&& loc, size_t i) noexcept;
 
-        size_t index() const
-        {
-            return m_index;
-        }
+        size_t index() const noexcept;
 
-        virtual kind node_kind() const override
-        {
-            return kind::dump;
-        }
+        virtual kind node_kind() const noexcept override;
 
     private:
         size_t m_index;

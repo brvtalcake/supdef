@@ -185,11 +185,11 @@ namespace
         return mk_array<T>(std::move(tup), std::index_sequence_for<Args...>{});
     }
 
-    template <typename... Types>
-    struct typelist
-    {
-        using types = std::tuple<Types...>;
-    };
+    //template <typename... Types>
+    //struct typelist
+    //{
+    //    using types = std::tuple<Types...>;
+    //};
 
     template <typename T, size_t N>
     static constexpr auto as_tuple(const std::array<T, N>& arr) noexcept

@@ -236,7 +236,7 @@ static inline supdef::ast::parse_error mk_recursive_parse_error(
     return mk_recursive_parse_error(
         parsed_node_kind,
         std::move(msg),
-        std::vector{expectations},
+        expectations,
         std::move(loc)
     );
 }
@@ -248,16 +248,16 @@ static inline supdef::ast::parse_error mk_parse_error(
     const supdef::token& got,
     std::optional<supdef::token_loc>&& loc = std::nullopt
 ) {
-    assert(!expectations.empty());
+    assert(expectations.size() > 0);
 
     using namespace std::string_literals;
     
     if (expectations.size() == 1)
     {
         if (loc)
-            return mk_parse_error(std::move(msg), *expectations.begin(), got, *std::move(loc));
+            return mk_parse_error(parsed_node_kind, std::move(msg), *expectations.begin(), got, std::move(loc));
         else
-            return mk_parse_error(std::move(msg), *expectations.begin(), got, got.loc);
+            return mk_parse_error(parsed_node_kind, std::move(msg), *expectations.begin(), got, std::make_optional(got.loc));
     }
     else if (expectations.size() > 1)
     {
@@ -415,24 +415,24 @@ parse_boolean(
     points_to_token_and_bidir auto& it,
     const points_to_token_and_bidir auto& begin,
     const points_to_token_and_bidir auto& end,
-    bool allow_non_constant = false,
-    bool allow_coercion = false
+    bool allow_coercion = false,
+    bool allow_non_constant = false
 );
 static parse_result<supdef::ast::integer_node>
 parse_integer(
     points_to_token_and_bidir auto& it,
     const points_to_token_and_bidir auto& begin,
     const points_to_token_and_bidir auto& end,
-    bool allow_non_constant = false,
-    bool allow_coercion = false
+    bool allow_coercion = false,
+    bool allow_non_constant = false
 );
 static parse_result<supdef::ast::floating_node>
 parse_floating(
     points_to_token_and_bidir auto& it,
     const points_to_token_and_bidir auto& begin,
     const points_to_token_and_bidir auto& end,
-    bool allow_non_constant = false,
-    bool allow_coercion = false
+    bool allow_coercion = false,
+    bool allow_non_constant = false
 );
 static parse_result<supdef::ast::builtin_node>
 parse_builtin(
@@ -638,100 +638,197 @@ static_assert(
 
 template <
     std::derived_from<supdef::ast::expression_node> NodeT,
-    typename TypeListT, typename TypeListIfCoerceT, typename TypeListIfNonConstT
-> requires supdef::is_typelist_v<TypeListT>         &&
-           supdef::is_typelist_v<TypeListIfCoerceT> &&
-           supdef::is_typelist_v<TypeListIfNonConstT>
-static parse_result<NodeT>
+    typename TypeListT,
+    typename TypeListIfCoerceT, typename TypeListIfNonConstT,
+    typename TypeListIfCoerceAndNonConstT
+> requires supdef::is_typelist_v<TypeListT>           &&
+           supdef::is_typelist_v<TypeListIfCoerceT>   &&
+           supdef::is_typelist_v<TypeListIfNonConstT> &&
+           supdef::is_typelist_v<TypeListIfCoerceAndNonConstT>
+static std::optional<supdef::shared_ptr<NodeT>>
 parse_expr_common(
     std::vector<std::pair<supdef::ast::node::kind, supdef::ast::parse_error>>& errors,
     points_to_token_and_bidir auto& it,
     const points_to_token_and_bidir auto& begin,
     const points_to_token_and_bidir auto& end,
-    bool allow_non_constant = false,
-    bool allow_coercion = false,
     TypeListT&& type_list = {},
     TypeListIfCoerceT&& type_list_if_coerce = {},
-    TypeListIfNonConstT&& type_list_if_non_const = {}
+    TypeListIfNonConstT&& type_list_if_non_const = {},
+    TypeListIfCoerceAndNonConstT&& type_list_if_coerce_and_non_const = {},
+    bool allow_coercion = false,
+    bool allow_non_constant = false,
+    bool propagate_coercion = false
 ) {
     using namespace supdef;
-    constexpr auto mk_ok_ret = [](auto&& maybe_X)
-        -> parse_result<NodeT>
+    constexpr auto mk_ok_ret = [](auto&& shared_X)
+        -> std::optional<shared_ptr<NodeT>>
             requires std::constructible_from<NodeT, ast::shared_expression>
     {
         return make_shared<NodeT>(
             dynamic_pointer_cast<ast::expression_node>(
-                FWD_AUTO(maybe_X).value()
+                FWD_AUTO(shared_X)
             )
         );
     };
     constexpr auto noop = [](auto&&...) { throw std::logic_error("shouldn't be called"); };
-    auto visiting_lambda = [&](auto&& tp) {
+    auto visiting_lambda = [&](auto&& v) -> std::optional<shared_ptr<NodeT>> {
+        using namespace hana::literals;
+
+        /**
+         * @var [ic, tp]
+         * @brief
+         * 
+         * `ic`: The integral constant representing the index of the type in the typelist.
+         * 
+         * `tp`: The `hana::type<actual-type>` representing the type in the typelist.
+         */
+        auto&& [ic, tp] = FWD_AUTO(v);
+
         constexpr size_t index = decltype(ic)::value;
         using type_container = decltype(tp);
-        using type = typename type_container::type;
-        constexpr auto parser = expression_parsers_table[type_container{}].value_or(
-            hana::make_tuple(ast::node::kind::unknown, BOOST_HOF_LIFT(noop))
-        )[1_c];
-        constexpr auto kind = expression_parsers_table[type_container{}].value_or(
-            hana::make_tuple(ast::node::kind::unknown, BOOST_HOF_LIFT(noop))
-        )[0_c];
+        using node_type = typename type_container::type;
+
+        static_assert(std::derived_from<node_type, ast::expression_node>);
+
+        constexpr auto defaulted = hana::make_tuple(ast::node::kind::unknown, BOOST_HOF_LIFT(noop));
+        constexpr auto kind = expression_parsers_table[type_container{}].value_or(defaulted)[0_c];
+        constexpr auto parser = expression_parsers_table[type_container{}].value_or(defaulted)[1_c];
         constexpr auto arity_info = supdef::arity_of(parser);
-        if (arity_info.max == 5)
+
+        [[maybe_unused]]
+        const bool coercion_param = propagate_coercion && allow_coercion;
+
+        if constexpr (arity_info.max >= 5)
         {
-            parse_result<type> maybe_X = parser(it, begin, end, allow_non_constant, allow_coercion);
-            if (maybe_X)
-                return mk_ok_ret(std::move(maybe_X));
+            parse_result<node_type> maybe_X = parser(it, begin, end, coercion_param, allow_non_constant);
+            if (maybe_X.has_value())
+                return mk_ok_ret(std::move(maybe_X).value());
+            else
+                errors.push_back(std::make_pair(kind, std::move(maybe_X).error()));
+        }
+        else if constexpr (arity_info.max == 4)
+        {
+            parse_result<node_type> maybe_X = parser(it, begin, end, coercion_param);
+            if (maybe_X.has_value())
+                return mk_ok_ret(std::move(maybe_X).value());
             else
                 errors.push_back(std::make_pair(kind, std::move(maybe_X).error()));
         }
         else
         {
-            parse_result<type> maybe_X = parser(it, begin, end);
+            parse_result<node_type> maybe_X = parser(it, begin, end);
             if (maybe_X)
                 return mk_ok_ret(std::move(maybe_X));
             else
                 errors.push_back(std::make_pair(kind, std::move(maybe_X).error()));
         }
+        return std::nullopt;
     };
-    for (const auto& var : std::move(type_list))
+    for (auto&& var : std::move(type_list))
     {
-        auto ret = std::visit(visiting_lambda, var);
+        auto ret = std::visit(visiting_lambda, FWD_AUTO(var));
         if (ret)
             return ret;
     }
-    if (allow_coercion)
-    {
-        for (const auto& var : std::move(type_list_if_coerce))
-        {
-            auto ret = std::visit(visiting_lambda, var);
-            if (ret)
-                return ret;
-        }
-    }
     if (allow_non_constant)
     {
-        for (const auto& var : std::move(type_list_if_non_const))
+        for (auto&& var : std::move(type_list_if_non_const))
         {
-            auto ret = std::visit(visiting_lambda, var);
+            auto ret = std::visit(visiting_lambda, FWD_AUTO(var));
             if (ret)
                 return ret;
         }
     }
-    return mk_recursive_parse_error(
-        ast::node::kind::expression,
-        "please provide a valid expression",
-        errors, std::make_optional(it->loc)
-    );
+    if (allow_coercion)
+    {
+        for (auto&& var : std::move(type_list_if_coerce))
+        {
+            auto ret = std::visit(visiting_lambda, FWD_AUTO(var));
+            if (ret)
+                return ret;
+        }
+    }
+    if (allow_non_constant && allow_coercion)
+    {
+        for (auto&& var : std::move(type_list_if_coerce_and_non_const))
+        {
+            auto ret = std::visit(visiting_lambda, FWD_AUTO(var));
+            if (ret)
+                return ret;
+        }
+    }
+    return std::nullopt;
 }
+
+using expr_explan_str_t = std::string(*)(std::string_view);
+
+static constexpr auto basic_explan_str = [](std::string_view sv) constexpr -> std::string {
+    using namespace std::string_literals;
+    return "please provide a valid "s +
+        sv.data()                     +
+        " expression";
+};
+
+static constexpr expr_explan_str_t expr_explan_strs[2][2] = {
+    {
+        // 0, 0
+        [](std::string_view sv) constexpr static -> std::string {
+            return basic_explan_str(sv)                +
+                " (hint: non-constant expressions and" +
+                " expressions coercing to "            +
+                sv.data()                              +
+                " are not valid within this context)";
+        },
+        // 0, 1
+        [](std::string_view sv) constexpr static -> std::string {
+            using namespace std::string_literals;
+            return basic_explan_str(sv)            +
+                " (hint: expressions coercing to " +
+                sv.data()                          +
+                " are not valid within this context)";
+        }
+    }, {
+        // 1, 0
+        [](std::string_view sv) constexpr static -> std::string {
+            return basic_explan_str(sv)            +
+                " (hint: non-constant expressions" +
+                " are not valid within this context)";
+        },
+        // 1, 1
+        [](std::string_view sv) constexpr static -> std::string {
+            return basic_explan_str(sv);
+        }
+    }
+};
+
+namespace test
+{
+    consteval bool test_explan_strs()
+    {
+        if (expr_explan_strs[0][0]("integers") != basic_explan_str("integers") +
+            " (hint: non-constant expressions and" +
+            " expressions coercing to integers are not valid within this context)")
+            return false;
+        if (expr_explan_strs[0][1]("integers") != basic_explan_str("integers") +
+            " (hint: expressions coercing to integers are not valid within this context)")
+            return false;
+        if (expr_explan_strs[1][0]("integers") != basic_explan_str("integers") +
+            " (hint: non-constant expressions are not valid within this context)")
+            return false;
+        if (expr_explan_strs[1][1]("integers") != basic_explan_str("integers"))
+            return false;
+        return true;
+    }
+}
+static_assert(std::bool_constant<test::test_explan_strs()>::value);
 
 static parse_result<supdef::ast::boolean_node>
 parse_boolean(
     points_to_token_and_bidir auto& it,
     const points_to_token_and_bidir auto& begin,
     const points_to_token_and_bidir auto& end,
-    bool allow_non_constant = false,
-    bool allow_coercion = false
+    bool allow_coercion,
+    bool allow_non_constant
 ) {
     using namespace supdef;
     using value_type = ast::boolean_node::value_type;
@@ -765,88 +862,33 @@ parse_boolean(
         return maybe_bool;
     }
 
-    if (allow_non_constant)
-    {
-        parse_result<ast::varsubst_node> maybe_variable_substitution = parse_varsubst(it, begin, end, false);
-        if (maybe_variable_substitution.has_value())
-            return make_shared<ast::boolean_node>(
-                supdef::dynamic_pointer_cast<ast::expression_node>(
-                    std::move(maybe_variable_substitution).value()
-                )
-            );
-        else
-            errors.push_back(
-                std::make_pair(
-                    ast::node::kind::varsubst,
-                    std::move(maybe_variable_substitution).error()
-                )
-            );
-        
-        parse_result<ast::macrocall_node> maybe_macro_call = parse_macrocall(it, begin, end, false);
-        if (maybe_macro_call)
-            return make_shared<ast::boolean_node>(
-                supdef::dynamic_pointer_cast<ast::expression_node>(
-                    std::move(maybe_macro_call).value()
-                )
-            );
-        else
-            errors.push_back(
-                std::make_pair(
-                    ast::node::kind::macrocall,
-                    std::move(maybe_macro_call).error()
-                )
-            );
-        
-        parse_result<ast::builtin_node> maybe_builtin = parse_builtin(it, begin, end, false);
-        if (maybe_builtin)
-            return make_shared<ast::boolean_node>(
-                supdef::dynamic_pointer_cast<ast::expression_node>(
-                    std::move(maybe_builtin).value()
-                )
-            );
-        else
-            errors.push_back(
-                std::make_pair(
-                    ast::node::kind::builtin,
-                    std::move(maybe_builtin).error()
-                )
-            );
-    }
-    if (allow_coercion)
-    {
-        parse_result<ast::integer_node> maybe_int = parse_integer(it, begin, end, allow_non_constant, false);
-        if (maybe_int)
-            return make_shared<ast::boolean_node>(
-                supdef::dynamic_pointer_cast<ast::expression_node>(
-                    std::move(maybe_int).value()
-                )
-            );
-        else
-            errors.push_back(
-                std::make_pair(
-                    ast::node::kind::integer,
-                    std::move(maybe_int).error()
-                )
-            );
-
-        parse_result<ast::floating_node> maybe_float = parse_floating(it, begin, end, allow_non_constant, false);
-        if (maybe_float)
-            return make_shared<ast::boolean_node>(
-                supdef::dynamic_pointer_cast<ast::expression_node>(
-                    std::move(maybe_float).value()
-                )
-            );
-        else
-            errors.push_back(
-                std::make_pair(
-                    ast::node::kind::floating,
-                    std::move(maybe_float).error()
-                )
-            );
-    }
+    using typelist_t = typelist<>;
+    using typelist_if_coerce_t = typelist<
+        ast::integer_node,
+        ast::floating_node
+    >;
+    using typelist_if_non_const_t = typelist<
+        ast::varsubst_node,
+        ast::macrocall_node,
+        ast::builtin_node
+    >;
+    using typelist_if_coerce_and_non_const_t = typelist<
+        ast::string_node
+    >;
+    std::optional<shared_ptr<ast::boolean_node>> maybe_bool = parse_expr_common<ast::boolean_node>(
+        errors, it, begin, end,
+        typelist_t{},
+        typelist_if_coerce_t{}, typelist_if_non_const_t{},
+        typelist_if_coerce_and_non_const_t{},
+        allow_coercion, allow_non_constant, false
+    );
+    if (maybe_bool)
+        return std::move(maybe_bool).value();
 
     return mk_recursive_parse_error(
-        ast::node::kind::boolean, "please provide a valid boolean expression",
+        ast::node::kind::boolean,
+        expr_explan_strs[allow_coercion][allow_non_constant]
+            ("boolean").c_str(),
         errors, std::make_optional(it->loc)
     );
 }
@@ -856,8 +898,8 @@ parse_integer(
     points_to_token_and_bidir auto& it,
     const points_to_token_and_bidir auto& begin,
     const points_to_token_and_bidir auto& end,
-    bool allow_non_constant = false,
-    bool allow_coercion = false
+    bool allow_coercion,
+    bool allow_non_constant
 ) {
     using namespace supdef;
     using value_type = ast::integer_node::value_type;
@@ -882,54 +924,107 @@ parse_integer(
         return maybe_int;
     }
 
-    if (allow_non_constant)
+    using typelist_t = typelist<>;
+    using typelist_if_coerce_t = typelist<
+        ast::floating_node,
+        ast::boolean_node
+    >;
+    using typelist_if_non_const_t = typelist<
+        ast::varsubst_node,
+        ast::macrocall_node,
+        ast::builtin_node
+    >;
+    using typelist_if_coerce_and_non_const_t = typelist<
+        ast::string_node
+    >;
+    std::optional<shared_ptr<ast::integer_node>> maybe_int = parse_expr_common<ast::integer_node>(
+        errors, it, begin, end,
+        typelist_t{},
+        typelist_if_coerce_t{}, typelist_if_non_const_t{},
+        typelist_if_coerce_and_non_const_t{},
+        allow_coercion, allow_non_constant, false
+    );
+    if (maybe_int)
+        return std::move(maybe_int).value();
+
+    return mk_recursive_parse_error(
+        ast::node::kind::integer,
+        expr_explan_strs[allow_coercion][allow_non_constant]
+            ("integer").c_str(),
+        errors, std::make_optional(it->loc)
+    );
+}
+
+static parse_result<supdef::ast::floating_node>
+parse_floating(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end,
+    bool allow_coercion,
+    bool allow_non_constant
+) {
+    using namespace supdef;
+    using value_type = ast::floating_node::value_type;
+    
+    std::vector<std::pair<ast::node::kind, ast::parse_error>> errors{};
+
+    if (accept_token(it, end, { .tkind = token_kind::floating_literal }, NOWS))
     {
-        parse_result<ast::varsubst_node> maybe_variable_substitution = parse_varsubst(it, begin, end, false);
-        if (maybe_variable_substitution.has_value())
-            return make_shared<ast::integer_node>(
-                supdef::dynamic_pointer_cast<ast::expression_node>(
-                    std::move(maybe_variable_substitution).value()
-                )
+        const token& tok = *next_token(it, end);
+        return make_shared<ast::floating_node>(tok.loc, tok.data.value());
+    }
+    if (accept_token(it, end, { .tkind = token_kind::lparen }, NOWS))
+    {
+        const token& tok = *next_token(it, end);
+        parse_result<ast::floating_node> maybe_float = parse_floating(it, begin, end, allow_non_constant, allow_coercion);
+        if (maybe_float)
+            expect_token(
+                it, end, ast::node::kind::floating,
+                { .tkind = token_kind::rparen },
+                ANYWS(0), "you probably forgot a closing parenthesis"
             );
-        else
-            errors.push_back(
-                std::make_pair(
-                    ast::node::kind::varsubst,
-                    std::move(maybe_variable_substitution).error()
-                )
-            );
-        
-        parse_result<ast::macrocall_node> maybe_macro_call = parse_macrocall(it, begin, end, false);
-        if (maybe_macro_call)
-            return make_shared<ast::integer_node>(
-                supdef::dynamic_pointer_cast<ast::expression_node>(
-                    std::move(maybe_macro_call).value()
-                )
-            );
-        else
-            errors.push_back(
-                std::make_pair(
-                    ast::node::kind::macrocall,
-                    std::move(maybe_macro_call).error()
-                )
-            );
-        
-        parse_result<ast::builtin_node> maybe_builtin = parse_builtin(it, begin, end, false);
-        if (maybe_builtin)
-            return make_shared<ast::integer_node>(
-                supdef::dynamic_pointer_cast<ast::expression_node>(
-                    std::move(maybe_builtin).value()
-                )
-            );
-        else
-            errors.push_back(
-                std::make_pair(
-                    ast::node::kind::builtin,
-                    std::move(maybe_builtin).error()
-                )
-            );
+        return maybe_float;
     }
 
+    using typelist_t = typelist<>;
+    using typelist_if_coerce_t = typelist<
+        ast::integer_node,
+        ast::boolean_node
+    >;
+    using typelist_if_non_const_t = typelist<
+        ast::varsubst_node,
+        ast::macrocall_node,
+        ast::builtin_node
+    >;
+    using typelist_if_coerce_and_non_const_t = typelist<
+        ast::string_node
+    >;
+    std::optional<shared_ptr<ast::floating_node>> maybe_float = parse_expr_common<ast::floating_node>(
+        errors, it, begin, end,
+        typelist_t{},
+        typelist_if_coerce_t{}, typelist_if_non_const_t{},
+        typelist_if_coerce_and_non_const_t{},
+        allow_coercion, allow_non_constant, false
+    );
+    if (maybe_float)
+        return std::move(maybe_float).value();
+
+    return mk_recursive_parse_error(
+        ast::node::kind::floating,
+        expr_explan_strs[allow_coercion][allow_non_constant]
+            ("floating-point number").c_str(),
+        errors, std::make_optional(it->loc)
+    );
+}
+
+static parse_result<supdef::ast::builtin_node>
+parse_builtin(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end
+) {
+    using namespace supdef;
+    throw ast::parse_error(it->loc, "not implemented");
 }
 
 static supdef::shared_ptr<supdef::ast::dump_node>

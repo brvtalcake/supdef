@@ -12,37 +12,17 @@ namespace supdef::ast
             std::vector<token>&& op,
             value_type&& lhs,
             value_type&& rhs
-        )   : node(std::move(loc))
-            , expression_node()
-            , m_op(std::move(op))
-            , m_operands(
-                std::make_pair(std::move(lhs), std::move(rhs))
-            )
-        {
-        }
+        ) noexcept;
 
-        const std::vector<token>& op() const
-        {
-            return m_op;
-        }
+        const std::vector<token>& op() const noexcept;
 
-        const std::pair<value_type, value_type>& operands() const
-        {
-            return m_operands;
-        }
+        const std::pair<value_type, value_type>& operands() const noexcept;
 
-        virtual bool is_constant() const override
-        {
-            return m_operands.first ->is_constant() &&
-                   m_operands.second->is_constant();
-        }
+        virtual bool is_constant() const noexcept override;
 
         // can not coerce before evaluating the op, so do not implement
 
-        virtual kind node_kind() const override
-        {
-            return kind::binaryop;
-        }
+        virtual kind node_kind() const noexcept override;
 
     private:
         std::vector<token> m_op;

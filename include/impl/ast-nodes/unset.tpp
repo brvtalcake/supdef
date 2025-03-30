@@ -9,27 +9,13 @@ namespace supdef::ast
             ::supdef::token_loc&& loc,
             std::u32string&& varname,
             bool global = false
-        )   : node(std::move(loc))
-            , directive_node(false)
-            , m_varname(std::move(varname))
-            , m_global(global)
-        {
-        }
+        ) noexcept;
 
-        const std::u32string& varname() const
-        {
-            return m_varname;
-        }
+        const std::u32string& varname() const noexcept;
 
-        bool global() const
-        {
-            return m_global;
-        }
+        bool global() const noexcept;
 
-        virtual kind node_kind() const override
-        {
-            return kind::unset;
-        }
+        virtual kind node_kind() const noexcept override;
 
     private:
         std::u32string m_varname;

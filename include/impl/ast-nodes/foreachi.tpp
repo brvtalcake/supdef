@@ -17,40 +17,17 @@ namespace supdef::ast
             std::u32string&& elemname, // a.k.a. varname
             shared_node&& iterable,
             std::vector<shared_node>&& repl
-        )   : node(std::move(loc))
-            , block_node(std::vector( { std::move(repl) } ))
-            , m_vars{ std::move(indexname), std::move(elemname) }
-            , m_iterable(std::move(iterable))
-        {
-        }
+        ) noexcept;
 
-        const std::u32string& indexname() const
-        {
-            return m_vars.index;
-        }
-        const std::u32string& elemname() const
-        {
-            return m_vars.elem;
-        }
-        const vars& variables() const
-        {
-            return m_vars;
-        }
+        const std::u32string& indexname() const noexcept;
+        const std::u32string& elemname() const noexcept;
+        const vars& variables() const noexcept;
 
-        const shared_node& iterable() const
-        {
-            return m_iterable;
-        }
+        const shared_node& iterable() const noexcept;
 
-        const std::vector<shared_node>& body() const
-        {
-            return this->replacement();
-        }
+        const std::vector<shared_node>& body() const noexcept;
 
-        virtual kind node_kind() const override
-        {
-            return kind::foreachi;
-        }
+        virtual kind node_kind() const noexcept override;
 
     private:
         vars m_vars;

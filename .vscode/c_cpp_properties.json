@@ -7,7 +7,8 @@
                 "${workspaceFolder}/include",
                 "${default}",
                 "/usr/include",
-                "/usr/include/boost"
+                "/usr/include/boost",
+                "/usr/local/include/eve-2023.2.15"
                 /* "${workspaceFolder}/**", */
                 /* "/home/axel/Documents/programmation/c/sup_def/", */
                 /* "/home/axel/Documents/programmation/c/sup_def/sup_def/third_party/", */
@@ -38,14 +39,16 @@
                 "BOOST_PP_LIMIT_MAG=1024",
                 "BOOST_PP_LIMIT_FOR=1024",
                 "BOOST_PP_LIMIT_REPEAT=1024",
-                "BOOST_PP_LIMIT_ITERATION=1024"
+                "BOOST_PP_LIMIT_ITERATION=1024",
+                "EVE_USE_BMI_ON_AVX2=1",
+                "EVE_USE_BMI_ON_AVX512=1"
             ],
             "compilerPath": "/usr/bin/g++",
             "cStandard": "gnu23",
             "cppStandard": "gnu++23",
             "intelliSenseMode": "linux-gcc-x64",
             "compilerArgs": [
-                "-O3"
+                "-O3", "-march=native", "-mtune=native"
                 /* "-I`/usr/local/bin/g++ -print-file-name=plugin`/include", */
             ],
             "mergeConfigurations": false

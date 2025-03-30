@@ -11,39 +11,18 @@ namespace supdef::ast
             interpreter::lang_identifier&& lang,
             std::map<std::u32string, std::vector<shared_node>>&& opts,
             std::vector<token>&& code
-        )   : node(std::move(loc))
-            , directive_node(false)
-            , m_name(std::move(name))
-            , m_lang(std::move(lang))
-            , m_opts(std::move(opts))
-            , m_code(std::move(code))
-        {
-        }
+        ) noexcept;
 
-        const std::u32string& name() const
-        {
-            return m_name;
-        }
+        const std::u32string& name() const noexcept;
 
-        const interpreter::lang_identifier& lang() const
-        {
-            return m_lang;
-        }
+        const interpreter::lang_identifier& lang() const noexcept;
 
-        const std::map<std::u32string, std::vector<shared_node>>& opts() const
-        {
-            return m_opts;
-        }
+        const std::map<std::u32string, std::vector<shared_node>>& opts() const noexcept;
 
-        const std::vector<token>& code() const
-        {
-            return m_code;
-        }
+        const std::vector<token>& code() const noexcept;
 
-        virtual kind node_kind() const override
-        {
-            return kind::runnable;
-        }
+        virtual kind node_kind() const noexcept override;
+
     private:
         std::u32string m_name;
         interpreter::lang_identifier m_lang;

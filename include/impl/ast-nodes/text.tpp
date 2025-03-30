@@ -4,27 +4,13 @@ namespace supdef::ast
         : public virtual node
     {
     public:
-        text_node(token&& t)
-            : node(t.loc)
-            , m_tok(std::move(t))
-        {
-            assert(m_tok.data != std::nullopt);
-        }
+        text_node(token&& t) noexcept;
 
-        bool is_identifier() const
-        {
-            return m_tok.kind == token_kind::identifier;
-        }
+        bool is_identifier() const noexcept;
 
-        const std::u32string& text() const
-        {
-            return *m_tok.data;
-        }
+        const std::u32string& text() const noexcept;
 
-        virtual kind node_kind() const override
-        {
-            return kind::text;
-        }
+        virtual kind node_kind() const noexcept override;
 
     private:
         token m_tok;

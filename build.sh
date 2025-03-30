@@ -104,6 +104,32 @@ function wait_for_user_input()
     read
 }
 
+function cpu_vendor_id()
+{
+    grep -oPe '(?<=vendor_id\s{0,100}:\s{0,100})\w+' /proc/cpuinfo
+}
+
+function cpu_vendor_id_matches()
+{
+    local _what="$1"
+    for vendor_id in $(cpu_vendor_id); do
+        if [ "$vendor_id" != "$_what" ]; then
+            return 1
+        fi
+    done
+    return 0
+}
+
+function cpu_is_intel()
+{
+    cpu_vendor_id_matches "GenuineIntel"
+}
+
+function cpu_is_amd()
+{
+    cpu_vendor_id_matches "AuthenticAMD"
+}
+
 ARGS="$@"
 if [ -z "$ARGS" ]; then
     files="$(find -L src -name '*.cpp' -o -name '*.cc' | xargs)"
@@ -120,7 +146,14 @@ trap "rm -f $jobfile" EXIT
 common_cflags="-fconcepts-diagnostics-depth=5 -fdiagnostics-color=always -pipe -std=gnu++23 -Wall -Wextra -march=native -mtune=native -flto -Wno-unused-function -Wno-comment -Wno-unused-local-typedefs -Wno-unused-parameter -Wno-unused-label"
 
 define LIBS "icu-io" "libgrapheme" "simdutf" "gmp" "mpfr"
-define CPPFLAGS "-Iinclude -D_GNU_SOURCE=1 -DSTATIC_INITIALIZER_ALLOCATION=1 -DBOOST_PP_LIMIT_MAG=1024 -DBOOST_PP_LIMIT_FOR=1024 -DBOOST_PP_LIMIT_REPEAT=1024 -DBOOST_PP_LIMIT_ITERATION=1024"
+
+if cpu_is_intel && ! cpu_is_amd; then
+    EVE_FLAGS="-DEVE_USE_BMI_ON_AVX2=1 -DEVE_USE_BMI_ON_AVX512=1"
+else
+    EVE_FLAGS=""
+fi
+define CPPFLAGS "-Iinclude -I/usr/local/include/eve-2023.2.15 -D_GNU_SOURCE=1 -DSTATIC_INITIALIZER_ALLOCATION=1 -DBOOST_PP_LIMIT_MAG=1024 -DBOOST_PP_LIMIT_FOR=1024 -DBOOST_PP_LIMIT_REPEAT=1024 -DBOOST_PP_LIMIT_ITERATION=1024 $EVE_FLAGS"
+
 if [ -z "$OPTIMIZE" ] || [ "$OPTIMIZE" -eq 0 ]; then
     define CFLAGS "$(expand_libs cflags) $common_cflags -Og -ggdb3"
 else

@@ -9,42 +9,16 @@ namespace supdef::ast
             ::supdef::token_loc&& loc,
             std::vector<shared_node>&& conds,
             std::vector<std::vector<shared_node>>&& repls
-        )   : node(std::move(loc))
-            , block_node(std::move(repls))
-            , m_conds(std::move(conds))
-        {
-        }
-        const std::vector<shared_node>& conds() const
-        {
-            return m_conds;
-        }
+        ) noexcept;
 
-        bool have_else() const
-        {
-            return m_conds.size() < this->replacements().size();
-        }
+        const std::vector<shared_node>& conds() const noexcept;
 
-        std::pair<std::optional<shared_node>, std::vector<shared_node>> cond_chain_get(size_t idx) const
-        {
-            if (idx >= this->replacements().size())
-                throw std::out_of_range("idx out of range");
-            try
-            {
-                // for the if's/elseif's
-                return {m_conds.at(idx), this->replacement_for(idx)};
-            }
-            catch (const std::out_of_range&)
-            {
-                // for the else
-                return {std::nullopt, this->replacement_for(idx)};
-            }
-            std::unreachable();
-        }
+        bool have_else() const noexcept;
 
-        virtual kind node_kind() const override
-        {
-            return kind::conditional;
-        }
+        // TODO: maybe the conditions should be shared_expression instead of shared_node
+        std::pair<std::optional<shared_node>, std::vector<shared_node>> cond_chain_get(size_t idx) const;
+
+        virtual kind node_kind() const noexcept override;
 
     private:
         std::vector<shared_node> m_conds;

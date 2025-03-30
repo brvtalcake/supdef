@@ -5,29 +5,13 @@ namespace supdef::ast
         , public directive_node
     {
     public:
-        import_node(::supdef::token_loc&& loc, stdfs::path&& path)
-            : node(std::move(loc))
-            , directive_node(false)
-            , m_path(std::move(path))
-        {
-        }
+        import_node(::supdef::token_loc&& loc, stdfs::path&& path) noexcept;
 
-        import_node(const ::supdef::token_loc& loc, stdfs::path&& path)
-            : node(loc)
-            , directive_node(false)
-            , m_path(std::move(path))
-        {
-        }
+        import_node(const ::supdef::token_loc& loc, stdfs::path&& path) noexcept;
 
-        const stdfs::path& path() const
-        {
-            return m_path;
-        }
+        const stdfs::path& path() const noexcept;
 
-        virtual kind node_kind() const override
-        {
-            return kind::import;
-        }
+        virtual kind node_kind() const noexcept override;
 
     private:
         stdfs::path m_path;

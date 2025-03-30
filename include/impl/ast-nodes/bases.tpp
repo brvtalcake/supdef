@@ -8,27 +8,14 @@ namespace supdef::ast
         : public virtual node
     {
     protected:
-        directive_node(bool outputs)
-            : m_outputs(outputs)
-        {
-        }
+        directive_node(bool outputs) noexcept;
 
     public:
-        directive_node(::supdef::token_loc&& loc, bool outputs)
-            : node(std::move(loc))
-            , m_outputs(outputs)
-        {
-        }
+        directive_node(::supdef::token_loc&& loc, bool outputs) noexcept;
 
-        bool outputs() const
-        {
-            return m_outputs;
-        }
+        bool outputs() const noexcept;
 
-        virtual kind node_kind() const override
-        {
-            return kind::directive;
-        }
+        virtual kind node_kind() const noexcept override;
 
     private:
         bool m_outputs;
@@ -38,28 +25,18 @@ namespace supdef::ast
         : public virtual node
     {
     protected:
-        expression_node() = default;
+        expression_node() noexcept = default;
 
         // This function is called by the coercion functions to ensure that the
         // coercion is only done on constant expressions.
-        void requires_constant() const
-        {
-            if (!this->is_constant())
-                throw std::runtime_error("non-constant coercion needs interpreter to first evaluate expression");
-        }
+        void requires_constant() const;
 
     public:
-        expression_node(::supdef::token_loc&& loc)
-            : node(std::move(loc))
-        {
-        }
+        expression_node(::supdef::token_loc&& loc) noexcept;
 
-        virtual kind node_kind() const override
-        {
-            return kind::expression;
-        }
+        virtual kind node_kind() const noexcept override;
 
-        virtual bool is_constant() const = 0;
+        virtual bool is_constant() const noexcept = 0;
         
         virtual bool coerce_to_boolean() const = 0;
         virtual supdef::bigint coerce_to_integer() const = 0;
@@ -71,35 +48,16 @@ namespace supdef::ast
         : public virtual node
     {
     protected:
-        block_node(std::vector<std::vector<shared_node>>&& repl)
-            : m_replacements(std::move(repl))
-        {
-        }
+        block_node(std::vector<std::vector<shared_node>>&& repl) noexcept;
 
     public:
-        block_node(::supdef::token_loc&& loc, std::vector<std::vector<shared_node>>&& repl)
-            : node(std::move(loc))
-            , m_replacements(std::move(repl))
-        {
-        }
+        block_node(::supdef::token_loc&& loc, std::vector<std::vector<shared_node>>&& repl) noexcept;
 
-        const std::vector<std::vector<shared_node>>& replacements() const
-        {
-            return m_replacements;
-        }
-        const std::vector<shared_node>& replacement_for(size_t index) const
-        {
-            return m_replacements.at(index);
-        }
-        const std::vector<shared_node>& replacement() const
-        {
-            return m_replacements.front();
-        }
+        const std::vector<std::vector<shared_node>>& replacements() const noexcept;
+        const std::vector<shared_node>& replacement_for(size_t index) const;
+        const std::vector<shared_node>& replacement() const;
 
-        virtual kind node_kind() const override
-        {
-            return kind::block;
-        }
+        virtual kind node_kind() const noexcept override;
 
     private:
         std::vector<std::vector<shared_node>> m_replacements;

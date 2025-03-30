@@ -11,39 +11,17 @@ namespace supdef::ast
             std::vector<shared_node>&& value,
             bool global = false,
             bool defer = false
-        )   : node(std::move(loc))
-            , directive_node(false)
-            , m_varname(std::move(varname))
-            , m_value(std::move(value))
-            , m_global(global)
-            , m_defer(defer)
-        {
-        }
+        ) noexcept;
 
-        const std::u32string& varname() const
-        {
-            return m_varname;
-        }
+        const std::u32string& varname() const noexcept;
 
-        const std::vector<shared_node>& value() const
-        {
-            return m_value;
-        }
+        const std::vector<shared_node>& value() const noexcept;
 
-        bool global() const
-        {
-            return m_global;
-        }
+        bool global() const noexcept;
 
-        bool defered_expansion() const
-        {
-            return m_defer;
-        }
+        bool defered_expansion() const noexcept;
 
-        virtual kind node_kind() const override
-        {
-            return kind::set;
-        }
+        virtual kind node_kind() const noexcept override;
 
     private:
         std::u32string m_varname;

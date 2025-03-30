@@ -14,51 +14,17 @@ namespace supdef::ast
             ::supdef::token_loc&& loc,
             std::u32string&& fname,
             std::vector<value_type>&& args
-        )   : node(std::move(loc))
-            , expression_node()
-            , m_funcname(std::move(fname))
-            , m_args(std::move(args))
-        {
-        }
+        ) noexcept;
 
-        const std::u32string& funcname() const
-        {
-            return m_funcname;
-        }
+        const std::u32string& funcname() const noexcept;
 
-        const std::vector<value_type>& args() const
-        {
-            return m_args;
-        }
+        const std::vector<value_type>& args() const noexcept;
 
-        virtual bool is_constant() const override
-        {
-            return std::all_of(
-                m_args.cbegin(),
-                m_args.cend(),
-                [](const value_type& arg) {
-                    return std::visit(
-                        [](const auto& val) {
-                            using helper_type = helper<decltype(val)>;
-
-                            if constexpr (std::same_as<typename helper_type::unqual_val_t, shared_text>)
-                                return true;
-                            else if constexpr (std::derived_from<typename helper_type::boxed_t, expression_node>)
-                                return val->is_constant();
-                            return false; // normally unreachable
-                        },
-                        arg
-                    );
-                }
-            );
-        }
+        virtual bool is_constant() const noexcept override;
         
         // can not coerce before evaluating the call, so do not implement
 
-        virtual kind node_kind() const override
-        {
-            return kind::builtin;
-        }
+        virtual kind node_kind() const noexcept override;
 
     private:
         std::u32string m_funcname;

@@ -62,6 +62,12 @@ static_assert(
 
 #include <boost/pfr.hpp>
 
+#include <boost/intrusive/hashtable.hpp>
+
+#include <boost/endian/arithmetic.hpp>
+
+#include <eve/eve.hpp>
+
 #include <experimental/scope>
 
 #define DO_PRAGMA(x) _Pragma (#x)
@@ -85,29 +91,62 @@ namespace mp11 = ::boost::mp11;
 namespace hof = ::boost::hof;
 namespace pfr = ::boost::pfr;
 namespace fn_traits = ::boost::callable_traits;
+namespace intrusive = ::boost::intrusive;
+namespace endian = ::boost::endian;
 
 #undef  PACKED_STRUCT
 #undef  PACKED_CLASS
 #undef  PACKED_UNION
 #undef  PACKED_ENUM
+#undef  PACKED_ALIGNED_STRUCT
+#undef  PACKED_ALIGNED_CLASS
+#undef  PACKED_ALIGNED_UNION
+#undef  PACKED_ALIGNED_ENUM
+
+#define PACKED_STRUCT(name) struct ATTRIBUTE_PACKED name
+#define PACKED_CLASS(name) class ATTRIBUTE_PACKED name
+#define PACKED_UNION(name) union ATTRIBUTE_PACKED name
+#define PACKED_ENUM(name) enum ATTRIBUTE_PACKED name
+#define PACKED_ALIGNED_STRUCT(name, align) struct ATTRIBUTE_PACKED ATTRIBUTE_ALIGNED(align) name
+#define PACKED_ALIGNED_CLASS(name, align) class ATTRIBUTE_PACKED ATTRIBUTE_ALIGNED(align) name
+#define PACKED_ALIGNED_UNION(name, align) union ATTRIBUTE_PACKED ATTRIBUTE_ALIGNED(align) name
+#define PACKED_ALIGNED_ENUM(name, align) enum ATTRIBUTE_PACKED ATTRIBUTE_ALIGNED(align) name
+
+#undef  ATTRIBUTE_PACKED
+#undef  ATTRIBUTE_ALIGNED
+
 #ifdef __has_cpp_attribute
-# if __has_cpp_attribute(__packed__) && 0
-#  define PACKED_STRUCT(name) struct [[__packed__]] name
-#  define PACKED_CLASS(name) class [[__packed__]] name
-#  define PACKED_UNION(name) union [[__packed__]] name
-#  define PACKED_ENUM(name) enum [[__packed__]] name
-# endif
+#  if __has_cpp_attribute(__packed__)
+#    define ATTRIBUTE_PACKED [[__packed__]]
+#  elif __has_cpp_attribute(__gnu__::__packed__)
+#    define ATTRIBUTE_PACKED [[__gnu__::__packed__]]
+#  endif
+#elif defined(__has_attribute)
+#  if __has_attribute(__packed__)
+#    define ATTRIBUTE_PACKED __attribute__((__packed__))
+#  endif
 #endif
-#if !defined(PACKED_STRUCT) && defined(__has_attribute)
-# if __has_attribute(__packed__)
-#  define PACKED_STRUCT(name) struct [[__gnu__::__packed__]] name
-#  define PACKED_CLASS(name) class [[__gnu__::__packed__]] name
-#  define PACKED_UNION(name) union [[__gnu__::__packed__]] name
-#  define PACKED_ENUM(name) enum [[__gnu__::__packed__]] name
-# endif
+
+#ifdef __has_cpp_attribute
+#  if __has_cpp_attribute(__aligned__)
+#    define ATTRIBUTE_ALIGNED(align) [[__aligned__(align)]]
+#  elif __has_cpp_attribute(__gnu__::__aligned__)
+#    define ATTRIBUTE_ALIGNED(align) [[__gnu__::__aligned__(align)]]
+#  endif
+#elif defined(__has_attribute)
+#  if __has_attribute(__aligned__)
+#    define ATTRIBUTE_ALIGNED(align) __attribute__((__aligned__(align)))
+#  endif
+#else
+#  define ATTRIBUTE_ALIGNED(align) alignas(align)
 #endif
-#if !defined(PACKED_STRUCT)
-# error "no PACKED_{STRUCT,CLASS,...} macros defined"
+
+#if !defined(ATTRIBUTE_PACKED)
+#  error "no __packed__ attribute"
+#endif
+
+#if !defined(ATTRIBUTE_ALIGNED)
+#  error "no __aligned__ attribute"
 #endif
 
 #undef  ATTRIBUTE_UNINITIALIZED
@@ -1082,6 +1121,15 @@ namespace supdef
     template <typename SpecT, template <typename...> class TemplT>
     concept specialization_of = is_template_instance_of_v<TemplT, SpecT>;
 
+    /**
+     * @brief This is a constexpr-compatible type list that can be used to
+     *        store types in a list-like manner. Note that its `value_type`
+     *        is a `std::variant` of all the types in the list + an `integral_constant`
+     *        of the index of the type in the list (to disambiguate between potentially
+     *        identical types in the variant).
+     *
+     * @tparam Ts The types in the list.
+     */
     template <typename... Ts>
     struct typelist
     {
@@ -1114,19 +1162,19 @@ namespace supdef
                 >
             >;
         }
+        
         template <size_t... Is>
-        static constexpr decltype(auto) mk_values(std::index_sequence<Is...>)
+        constexpr typelist(std::index_sequence<Is...>)
+            : m_values{ value_at<Is>()... }
         {
-            return std::array{
-                value_at<Is>()...
-            };
         }
+
     public:
         using value_type = typename decltype(mk_value_type(std::index_sequence_for<Ts...>{}))::type;
         static constexpr size_t size = sizeof...(Ts);
 
         constexpr typelist()
-            : m_values{ mk_values(index_seq_type{}) }
+            : typelist(index_seq_type{})
         {
         }
 
@@ -1135,18 +1183,86 @@ namespace supdef
             return std::get<idx>(m_values);
         }
 
-        constexpr auto begin() const
+        constexpr auto begin() const &
         {
             return m_values.begin();
         }
 
-        constexpr auto end() const
+        constexpr auto begin() &&
+        {
+            return std::make_move_iterator(m_values.begin());
+        }
+
+        constexpr auto end() const &
         {
             return m_values.end();
         }
 
+        constexpr auto end() &&
+        {
+            return std::make_move_iterator(m_values.end());
+        }
+
     private:
-        const std::array<value_type, sizeof...(Ts)> m_values;
+        std::array<value_type, sizeof...(Ts)> m_values;
+    };
+
+    struct null_iterator
+    {
+        constexpr null_iterator() = default;
+
+        constexpr null_iterator& operator++()
+        {
+            return *this;
+        }
+
+        constexpr null_iterator operator++(int)
+        {
+            return *this;
+        }
+
+        constexpr bool operator==(const null_iterator&) const
+        {
+            return true;
+        }
+
+        constexpr bool operator!=(const null_iterator&) const
+        {
+            return false;
+        }
+
+        constexpr const std::nullptr_t& operator*() const
+        {
+            static const std::nullptr_t null = nullptr;
+            return null;
+        }
+    };
+
+    template <>
+    struct typelist<>
+    {
+        using value_type = std::nullptr_t;
+        static constexpr size_t size = 0;
+
+        constexpr typelist()
+        {
+        }
+
+        constexpr const std::nullptr_t& operator[](size_t) const
+        {
+            static const std::nullptr_t null = nullptr;
+            return null;
+        }
+
+        constexpr null_iterator begin() const
+        {
+            return { };
+        }
+
+        constexpr null_iterator end() const
+        {
+            return { };
+        }
     };
 
     namespace detail
@@ -1233,34 +1349,10 @@ namespace supdef
             return ret;
         }
 
-        static_assert(
-            decltype(
-                min_arity_of_fn([](int, int) { return 0; })
-            )::value == 2,
-            "min_arity_of_fn is broken"
-        );
-        static_assert(
-            decltype(
-                min_arity_of_fn([](int, int, ...) { return 0; })
-            )::value == 2,
-            "min_arity_of_fn is broken"
-        );
-        static_assert(
-            decltype(
-                min_arity_of_fn(BOOST_HOF_LIFT([](int, int) { return 0; }))
-            )::value == 2,
-            "min_arity_of_fn is broken"
-        );
-        static_assert(
-            decltype(
-                min_arity_of_fn(BOOST_HOF_LIFT([](int, int, ...) { return 0; }))
-            )::value == 2,
-            "min_arity_of_fn is broken"
-        );
-
-        template <typename Fn>
-        static consteval decltype(auto) max_arity_of_fn(size_t min_arity, Fn&&)
+        template <typename Fn, size_t ICVal>
+        static consteval decltype(auto) max_arity_of_fn(hana::size_t<ICVal>, Fn&&)
         {
+            constexpr size_t min_arity = ICVal;
             if constexpr (min_arity >= 100)
                 return 100;
 
@@ -1290,15 +1382,40 @@ namespace supdef
             constexpr auto state = hana::size_c<min_arity>;
             constexpr auto ret = hana::while_(pred, state, do_inc);
 
-            return ret;
+            if constexpr (ret == hana::size_c<100>)
+                return hana::size_c<100>;
+            else
+                return ret - hana::size_c<1>;
+        }
+
+        template <size_t ICVal>
+        static constexpr decltype(auto) arity_normalize(hana::size_t<ICVal> val)
+        {
+            constexpr size_t max_size_t = std::numeric_limits<size_t>::max();
+            if constexpr (ICVal >= 100)
+                return hana::size_c<max_size_t>;
+            else
+                return val;
         }
 
         template <typename Fn>
+        static constexpr std::pair<size_t, size_t> do_arity_impl(...);
+
+        template <typename Fn>
+            requires (
+                !requires {
+                    typename fn_traits::has_varargs<Fn>;
+                }
+            )
         static constexpr std::pair<size_t, size_t> do_arity_impl(Fn&& fn)
         {
-            constexpr size_t min_arity = decltype(min_arity_of_fn(std::forward<Fn>(fn)))::value;
-            constexpr size_t max_arity = decltype(max_arity_of_fn(min_arity, std::forward<Fn>(fn)))::value;
-            return { min_arity, max_arity >= 100 ? (size_t)-1 : max_arity };
+            constexpr hana::size_t min_arity = decltype(min_arity_of_fn(std::forward<Fn>(fn))){};
+            constexpr hana::size_t max_arity = decltype(max_arity_of_fn(min_arity, std::forward<Fn>(fn))){};
+
+            return {
+                decltype(min_arity)::value,
+                decltype(arity_normalize(max_arity))::value
+            };
         }
         
 
@@ -1308,11 +1425,19 @@ namespace supdef
             }
         static constexpr std::pair<size_t, size_t> do_arity_impl(Fn&& fn)
         {
-            constexpr size_t min_arity = decltype(min_arity_of_fn(std::forward<Fn>(fn)))::value;
-            constexpr size_t max_arity = !fn_traits::has_varargs_v<Fn>
-                                       ? decltype(max_arity_of_fn(min_arity, std::forward<Fn>(fn)))::value
-                                       : (size_t)-1;
-            return { min_arity, max_arity };
+            constexpr hana::size_t min_arity = decltype(min_arity_of_fn(std::forward<Fn>(fn))){};
+            constexpr hana::size_t max_arity = [&] {
+                constexpr size_t max_size_t = std::numeric_limits<size_t>::max();
+                if constexpr (!fn_traits::has_varargs_v<Fn>)
+                    return decltype(max_arity_of_fn(min_arity, std::forward<Fn>(fn))){};
+                else
+                    return hana::size_c<max_size_t>;
+            }();
+
+            return {
+                decltype(min_arity)::value,
+                decltype(arity_normalize(max_arity))::value
+            };
         }
     }
 
@@ -1339,44 +1464,33 @@ namespace supdef
         return arity(std::forward<Fn>(fn));
     }
 
-    static_assert(
-        arity_of([](int, int) { return 0; }).value == std::pair<size_t, size_t>{ 2, 2 },
-        "arity_of is broken"
-    );
-    static_assert(
-        arity_of([](int, int, ...) { return 0; }).value == std::pair<size_t, size_t>{ 2, (size_t)-1 },
-        "arity_of is broken"
-    );
-    static_assert(
-        arity_of(BOOST_HOF_LIFT([](int, int) { return 0; })).value == std::pair<size_t, size_t>{ 2, 2 },
-        "arity_of is broken"
-    );
-    static_assert(
-        arity_of(BOOST_HOF_LIFT([](int, int, ...) { return 0; })).value == std::pair<size_t, size_t>{ 2, (size_t)-1 },
-        "arity_of is broken"
-    );
-}
-namespace detail
-{
-    namespace test
+    /**
+     * @brief A container of containers, to ease sequencing of iteration
+     *        over multiple containers
+     * 
+     * @tparam Containers (deduced) The containers to store in the meta container
+     * @todo Implement the actual iteration logic
+     */
+    template <typename... Containers>
+    class meta_container
     {
-        consteval bool test_adl_dynamic_pointer_cast()
+        template <size_t N>
+        using container_type_at = std::remove_cvref_t<nth_type_t<N, Containers...>>;
+
+        template <size_t... Is>
+        static constexpr decltype(auto) storage_type_impl(std::index_sequence<Is...>)
         {
-            using namespace supdef;
-
-            {    
-                struct A { char dummy; };
-                struct B : A {};
-                struct C : B {};
-
-                auto a = make_shared<A>();
-
-                auto b = dynamic_pointer_cast<B>(a);
-            }
-
-            return false;
+            return hana::make_tuple(
+                std::declval<container_type_at<Is>>()...
+            );
         }
-    }
+
+        using storage_type = decltype(storage_type_impl(std::index_sequence_for<Containers...>{}));
+    
+    public:
+    private:
+        storage_type m_storage;
+    };
 }
 
 template <typename R>
@@ -1392,6 +1506,8 @@ inline constexpr bool stdranges::enable_borrowed_range<supdef::drop_last_view<R>
 #include <test/prepend_to_is.hpp>
 #include <test/index_sequence_for_XXX.hpp>
 #include <test/boxed_type.hpp>
+#include <test/arity.hpp>
+#include <test/typelist.hpp>
 
 #include <detail/xxhash.hpp>
 #include <detail/ckd_arith.hpp>
