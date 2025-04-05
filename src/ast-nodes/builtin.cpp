@@ -24,7 +24,7 @@ namespace supdef::ast
         return m_args;
     }
 
-    virtual bool builtin_node::is_constant() const noexcept override
+    bool builtin_node::is_constant() const noexcept
     {
         return std::all_of(
             m_args.cbegin(),
@@ -46,7 +46,7 @@ namespace supdef::ast
         );
     }
 
-    virtual node::kind builtin_node::node_kind() const noexcept override
+    node::kind builtin_node::node_kind() const noexcept
     {
         return kind::builtin;
     }

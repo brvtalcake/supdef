@@ -1,13 +1,7 @@
 #ifndef XXHASH_HPP
 #define XXHASH_HPP
 
-#include <cstddef>
-#include <cstdint>
-#include <ctime>
-#include <concepts>
-#include <type_traits>
-#include <optional>
-#include <bit>
+#include <types.hpp>
 
 #if 0
 #define XXH_INLINE_ALL 1

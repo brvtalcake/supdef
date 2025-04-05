@@ -1,23 +1,7 @@
 #ifndef UNICODE_HPP
 #define UNICODE_HPP
 
-#include <unicode/unistr.h>
-#include <unicode/normalizer2.h>
-#include <unicode/utypes.h>
-#include <unicode/ucnv.h>
-#include <unicode/uchar.h>
-#include <unicode/udata.h>
-
-#include <stdexcept>
-#include <string>
-#include <type_traits>
-#include <utility>
-#include <concepts>
-#include <optional>
-#include <limits>
-#include <locale>
-#include <cmath>
-#include <tgmath.h>
+#include <types.hpp>
 
 namespace supdef
 {
@@ -34,13 +18,19 @@ namespace supdef
         static inline std::optional<T> numeric_value(UChar32 c)
         {
             static_assert(
-                boost::function_types::function_arity<decltype(u_getNumericValue)>::value == 1
+                std::tuple_size_v<fn_traits::args_t<decltype(u_getNumericValue)>> == 1
             );
             static_assert(
-                std::same_as<boost::mpl::at_c<boost::function_types::parameter_types<decltype(u_getNumericValue)>, 0>::type, UChar32>
+                std::same_as<
+                    std::tuple_element_t<0, fn_traits::args_t<decltype(u_getNumericValue)>>,
+                    UChar32
+                >
             );
             static_assert(
-                std::same_as<std::invoke_result_t<decltype(u_getNumericValue), UChar32>, double>
+                std::same_as<
+                    std::invoke_result_t<decltype(u_getNumericValue), UChar32>,
+                    double
+                >
             );
 
             double val = u_getNumericValue(c);

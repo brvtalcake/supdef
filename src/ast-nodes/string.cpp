@@ -52,7 +52,7 @@ namespace supdef::ast
         );
     }
 
-    virtual bool string_node::is_constant() const noexcept override
+    bool string_node::is_constant() const noexcept
     {
         return std::visit(
             [](const auto& val) {
@@ -71,7 +71,7 @@ namespace supdef::ast
     // for coercion to bool / int / float, the interpreter must first reparse the string contents as a
     // bool / int / float, so do not implement
 
-    virtual std::u32string string_node::coerce_to_string() const override
+    std::u32string string_node::coerce_to_string() const
     {
         this->requires_constant();
 
@@ -89,7 +89,7 @@ namespace supdef::ast
         );
     }
 
-    virtual node::kind string_node::node_kind() const noexcept override
+    node::kind string_node::node_kind() const noexcept
     {
         return kind::string;
     }

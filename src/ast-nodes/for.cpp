@@ -37,7 +37,7 @@ namespace supdef::ast
         return this->replacement();
     }
 
-    virtual node::kind for_node::node_kind() const noexcept override
+    node::kind for_node::node_kind() const noexcept
     {
         return kind::for_;
     }

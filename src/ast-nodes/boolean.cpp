@@ -28,7 +28,7 @@ namespace supdef::ast
         return m_val;
     }
 
-    virtual bool boolean_node::is_constant() const noexcept override
+    bool boolean_node::is_constant() const noexcept
     {
         return std::visit(
             [](const auto& val) {
@@ -44,7 +44,7 @@ namespace supdef::ast
         );
     }
 
-    virtual bool boolean_node::coerce_to_boolean() const override
+    bool boolean_node::coerce_to_boolean() const
     {
         this->requires_constant();
 
@@ -62,7 +62,7 @@ namespace supdef::ast
         );
     }
 
-    virtual supdef::bigint boolean_node::coerce_to_integer() const override
+    supdef::bigint boolean_node::coerce_to_integer() const
     {
         this->requires_constant();
     
@@ -80,7 +80,7 @@ namespace supdef::ast
         );
     }
 
-    virtual supdef::bigfloat boolean_node::coerce_to_floating() const override
+    supdef::bigfloat boolean_node::coerce_to_floating() const
     {
         this->requires_constant();
     
@@ -99,7 +99,7 @@ namespace supdef::ast
         );
     }
 
-    virtual std::u32string boolean_node::coerce_to_string() const override
+    std::u32string boolean_node::coerce_to_string() const
     {
         this->requires_constant();
     
@@ -117,7 +117,7 @@ namespace supdef::ast
         );
     }
 
-    virtual node::kind boolean_node::node_kind() const noexcept override
+    node::kind boolean_node::node_kind() const noexcept
     {
         return kind::boolean;
     }

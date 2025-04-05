@@ -38,7 +38,7 @@ namespace supdef::ast
         return m_defer;
     }
 
-    virtual node::kind set_node::node_kind() const noexcept override
+    node::kind set_node::node_kind() const noexcept
     {
         return kind::set;
     }

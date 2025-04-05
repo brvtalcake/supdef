@@ -21,7 +21,7 @@ namespace supdef::ast
         return m_path;
     }
 
-    virtual node::kind import_node::node_kind() const noexcept override
+    node::kind import_node::node_kind() const noexcept
     {
         return kind::import;
     }

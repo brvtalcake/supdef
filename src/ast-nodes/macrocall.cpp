@@ -34,7 +34,7 @@ namespace supdef::ast
         return m_args;
     }
 
-    virtual bool macrocall_node::is_constant() const noexcept override
+    bool macrocall_node::is_constant() const noexcept
     {
         bool values[] = {
             std::all_of(
@@ -73,7 +73,7 @@ namespace supdef::ast
 
     // can not coerce before evaluating the call, so do not implement
 
-    virtual node::kind macrocall_node::node_kind() const noexcept override
+    node::kind macrocall_node::node_kind() const noexcept
     {
         return kind::macrocall;
     }

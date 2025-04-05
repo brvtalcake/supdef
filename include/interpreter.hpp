@@ -6,23 +6,6 @@
 #include <file.hpp>
 #include <tokenizer.hpp>
 
-#include <variant>
-#include <string>
-#include <optional>
-#include <vector>
-#include <map>
-#include <list>
-#include <unordered_map>
-#include <unordered_set>
-#include <set>
-#include <algorithm>
-#include <iterator>
-#include <memory>
-#include <utility>
-
-#include <boost/multiprecision/gmp.hpp>
-#include <boost/multiprecision/mpfr.hpp>
-
 namespace supdef
 {
     namespace interpreter

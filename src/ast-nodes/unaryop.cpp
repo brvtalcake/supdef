@@ -24,14 +24,14 @@ namespace supdef::ast
         return m_operand;
     }
 
-    virtual bool unaryop_node::is_constant() const noexcept override
+    bool unaryop_node::is_constant() const noexcept
     {
         return m_operand->is_constant();
     }
 
     // can not coerce before evaluating the op, so do not implement
 
-    virtual node::kind unaryop_node::node_kind() const noexcept override
+    node::kind unaryop_node::node_kind() const noexcept
     {
         return kind::unaryop;
     }

@@ -72,7 +72,7 @@ namespace supdef::ast
         return m_val;
     }
 
-    virtual bool floating_node::is_constant() const noexcept override
+    bool floating_node::is_constant() const noexcept
     {
         return std::visit(
             [](const auto& val) {
@@ -88,7 +88,7 @@ namespace supdef::ast
         );
     }
 
-    virtual bool floating_node::coerce_to_boolean() const override
+    bool floating_node::coerce_to_boolean() const
     {
         this->requires_constant();
 
@@ -106,7 +106,7 @@ namespace supdef::ast
         );
     }
 
-    virtual supdef::bigint floating_node::coerce_to_integer() const override
+    supdef::bigint floating_node::coerce_to_integer() const
     {
         this->requires_constant();
 
@@ -124,7 +124,7 @@ namespace supdef::ast
         );
     }
     
-    virtual supdef::bigfloat floating_node::coerce_to_floating() const override
+    supdef::bigfloat floating_node::coerce_to_floating() const
     {
         this->requires_constant();
 
@@ -142,7 +142,7 @@ namespace supdef::ast
         );
     }
 
-    virtual std::u32string floating_node::coerce_to_string() const override
+    std::u32string floating_node::coerce_to_string() const
     {
         this->requires_constant();
 
@@ -160,7 +160,7 @@ namespace supdef::ast
         );
     }
 
-    virtual node::kind floating_node::node_kind() const noexcept override
+    node::kind floating_node::node_kind() const noexcept
     {
         return kind::floating;
     }

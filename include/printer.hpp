@@ -5,10 +5,6 @@
 #include <tokenizer.hpp>
 #include <version.hpp>
 
-#include <bits/stdc++.h>
-
-#include <simdutf.h>
-
 namespace supdef
 {
     namespace printer

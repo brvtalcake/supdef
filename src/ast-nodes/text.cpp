@@ -19,7 +19,7 @@ namespace supdef::ast
         return *m_tok.data;
     }
 
-    virtual node::kind text_node::node_kind() const noexcept override
+    node::kind text_node::node_kind() const noexcept
     {
         return kind::text;
     }

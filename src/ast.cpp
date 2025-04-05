@@ -4,22 +4,9 @@
 #include <types.hpp>
 #include <impl/parsing-utils.tpp>
 
-#include <bits/stdc++.h>
-
-#include <boost/mpl/for_each.hpp>
-#include <boost/mpl/vector.hpp>
-#include <boost/mpl/transform.hpp>
-
-#include <boost/hana.hpp>
-
-#include <boost/hof.hpp>
-
-#include <boost/mp11.hpp>
-
-#include <reFlexLexer.h>
+#include <regex>
 
 namespace hana = boost::hana;
-namespace mp11 = boost::mp11;
 namespace hof = boost::hof;
 
 supdef::ast::builder::builder(const std::list<::supdef::token>& tokens)
@@ -909,7 +896,7 @@ parse_integer(
     if (accept_token(it, end, { .tkind = token_kind::integer_literal }, NOWS))
     {
         const token& tok = *next_token(it, end);
-        return make_shared<ast::integer_node>(tok.loc, tok.data.value());
+        return supdef::make_shared<ast::integer_node>(tok.loc, tok.data.value());
     }
     if (accept_token(it, end, { .tkind = token_kind::lparen }, NOWS))
     {
@@ -971,7 +958,7 @@ parse_floating(
     if (accept_token(it, end, { .tkind = token_kind::floating_literal }, NOWS))
     {
         const token& tok = *next_token(it, end);
-        return make_shared<ast::floating_node>(tok.loc, tok.data.value());
+        return supdef::make_shared<ast::floating_node>(tok.loc, tok.data.value());
     }
     if (accept_token(it, end, { .tkind = token_kind::lparen }, NOWS))
     {
@@ -1017,6 +1004,67 @@ parse_floating(
     );
 }
 
+static inline bool validate_builtin_name(const supdef::token& tok) noexcept
+{
+    using namespace supdef;
+    static constexpr std::array builtins{
+        keyword_kind::join,
+        keyword_kind::split,
+        keyword_kind::str,
+        keyword_kind::unstr,
+        keyword_kind::len,
+        keyword_kind::math,
+        keyword_kind::raw
+    };
+    return stdranges::any_of(
+        builtins,
+        [&tok](const auto& builtin) {
+            return tok.keyword.value_or(keyword_kind::unknown) == builtin;
+        }
+    );
+}
+
+static inline bool handle_special_punct(
+    points_to_token_and_bidir auto& it,
+    const points_to_token_and_bidir auto& begin,
+    const points_to_token_and_bidir auto& end,
+    long& paren_lvl, long& angle_lvl,
+    long& brace_lvl, long& square_lvl
+) noexcept {
+    using namespace supdef;
+    switch (it->kind)
+    {
+        case token_kind::lparen:
+            ++paren_lvl;
+            break;
+        case token_kind::rparen:
+            --paren_lvl;
+            break;
+        case token_kind::langle:
+            ++angle_lvl;
+            break;
+        case token_kind::rangle:
+            --angle_lvl;
+            break;
+        case token_kind::lbrace:
+            ++brace_lvl;
+            break;
+        case token_kind::rbrace:
+            --brace_lvl;
+            break;
+        case token_kind::lbracket:
+            ++square_lvl;
+            break;
+        case token_kind::rbracket:
+            --square_lvl;
+            break;
+        default:
+            return false; // not a special punctuation
+    }
+    next_token(it, end);
+    return true;
+}
+
 static parse_result<supdef::ast::builtin_node>
 parse_builtin(
     points_to_token_and_bidir auto& it,
@@ -1024,7 +1072,71 @@ parse_builtin(
     const points_to_token_and_bidir auto& end
 ) {
     using namespace supdef;
-    throw ast::parse_error(it->loc, "not implemented");
+
+    using value_type = default_constructible_variant<ast::builtin_node::value_type>;
+    auto to_args = [](std::vector<value_type>&& args) -> std::vector<no_monostate_variant<value_type>> {
+        if constexpr (std::same_as<value_type, no_monostate_variant<value_type>>)
+            return std::move(args);
+        else
+            return {
+                std::make_move_iterator(args.begin()),
+                std::make_move_iterator(args.end())
+            };
+    };
+
+    // @
+    if (!accept_token(it, end, { .tkind = token_kind::at }, NOWS))
+        return mk_parse_error(
+            ast::node::kind::builtin,
+            "expected a builtin function call",
+            { .tkind = token_kind::at },
+            *it
+        );
+    next_token(it, end);
+    
+    // func name
+    if (!accept_token(it, end, { .tkind = token_kind::keyword }, ANYWS(0)))
+        return mk_parse_error(
+            ast::node::kind::builtin,
+            "expected a builtin function call",
+            { .tkind = token_kind::keyword },
+            *it
+        );
+    const auto tok = next_token(it, end);
+    if (!validate_builtin_name(*tok))
+        return mk_parse_error(
+            ast::node::kind::builtin,
+            "expected a builtin function call",
+            { .tkind = token_kind::keyword },
+            *it
+        );
+    const auto builtin_name = tok->keyword.value();
+
+    // (
+    long paren_lvl  = 0; // ( )
+    long angle_lvl  = 0; // < >
+    long brace_lvl  = 0; // { }
+    long square_lvl = 0; // [ ]
+    if (!accept_token(it, end, { .tkind = token_kind::lparen }, ANYWS(0)))
+        return mk_parse_error(
+            ast::node::kind::builtin,
+            "expected a builtin function call",
+            { .tkind = token_kind::lparen },
+            *it
+        );
+    next_token(it, end);
+    ++paren_lvl;
+
+    // args
+    std::vector<value_type> args;
+    value_type arg;
+    bool void_arg = true;
+    while (it != end && paren_lvl > 0)
+    {
+        if (handle_special_punct(it, begin, end, paren_lvl, angle_lvl, brace_lvl, square_lvl))
+            continue;
+        
+    }
 }
 
 static supdef::shared_ptr<supdef::ast::dump_node>

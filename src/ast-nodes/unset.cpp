@@ -24,7 +24,7 @@ namespace supdef::ast
         return m_global;
     }
 
-    virtual node::kind unset_node::node_kind() const noexcept override
+    node::kind unset_node::node_kind() const noexcept
     {
         return kind::unset;
     }

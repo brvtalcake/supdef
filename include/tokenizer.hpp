@@ -4,12 +4,6 @@
 #include <types.hpp>
 #include <unicode.hpp>
 
-#include <filesystem>
-#include <vector>
-#include <utility>
-#include <generator>
-#include <string>
-
 namespace supdef
 {
     enum class token_kind

@@ -28,13 +28,13 @@ namespace supdef::ast
         return m_operands;
     }
 
-    virtual bool binaryop_node::is_constant() const noexcept override
+    bool binaryop_node::is_constant() const noexcept
     {
         return m_operands.first ->is_constant() &&
                m_operands.second->is_constant();
     }
 
-    virtual node::kind binaryop_node::node_kind() const noexcept override
+    node::kind binaryop_node::node_kind() const noexcept
     {
         return kind::binaryop;
     }

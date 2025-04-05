@@ -14,7 +14,7 @@ namespace supdef::ast
         return m_index;
     }
 
-    virtual node::kind dump_node::node_kind() const noexcept override
+    node::kind dump_node::node_kind() const noexcept
     {
         return kind::dump;
     }

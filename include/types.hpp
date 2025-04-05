@@ -3,9 +3,35 @@
 
 #include <version.hpp>
 
-#include <bits/stdc++.h>
-#include <bits/extc++.h>
+//#include <bits/stdc++.h>
+//#include <bits/extc++.h>
+#include <ext/pb_ds/assoc_container.hpp>
+#include <unordered_set>
+#include <unordered_map>
+#include <ranges>
+#include <bit>
+#include <bitset>
+#include <filesystem>
+#include <vector>
+#include <utility>
+#include <generator>
+#include <string>
 #include <execution>
+#include <limits>
+#include <cmath>
+
+#include <unicode/unistr.h>
+#include <unicode/normalizer2.h>
+#include <unicode/utypes.h>
+#include <unicode/ucnv.h>
+#include <unicode/uchar.h>
+#include <unicode/udata.h>
+#include <unicode/ustream.h>
+#include <unicode/unistr.h>
+
+#include <simdutf.h>
+
+#include <magic_enum.hpp>
 
 #include <boost/preprocessor/config/config.hpp>
 static_assert(
@@ -17,6 +43,8 @@ static_assert(
     "supdef requires variadic macro support"
 );
 
+#include <boost/logic/tribool.hpp>
+
 #include <boost/multiprecision/gmp.hpp>
 #include <boost/multiprecision/mpfr.hpp>
 #include <boost/multiprecision/mpfi.hpp>
@@ -25,36 +53,44 @@ static_assert(
 
 #include <boost/utility/identity_type.hpp>
 
-#include <boost/stl_interfaces/iterator_interface.hpp>
-#include <boost/stl_interfaces/reverse_iterator.hpp>
-#include <boost/stl_interfaces/sequence_container_interface.hpp>
-#include <boost/stl_interfaces/view_adaptor.hpp>
-#include <boost/stl_interfaces/view_interface.hpp>
+//#include <boost/stl_interfaces/iterator_interface.hpp>
+//#include <boost/stl_interfaces/reverse_iterator.hpp>
+//#include <boost/stl_interfaces/sequence_container_interface.hpp>
+//#include <boost/stl_interfaces/view_adaptor.hpp>
+//#include <boost/stl_interfaces/view_interface.hpp>
 
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #include <boost/smart_ptr/make_local_shared.hpp>
 
-#include <boost/hof.hpp>
+//#include <boost/pool/pool.hpp>
 
-#include <boost/pool/pool.hpp>
+//#include <boost/mpl/value_type_fwd.hpp>
 
-#include <boost/mpl/vector.hpp>
-#include <boost/mpl/contains.hpp>
-#include <boost/mpl/for_each.hpp>
-#include <boost/mpl/transform.hpp>
+#include <boost/hana/type.hpp>
+#include <boost/hana/filter.hpp>
+#include <boost/hana/unpack.hpp>
+#include <boost/hana/tuple.hpp>
+#include <boost/hana/functional.hpp>
+#include <boost/hana/while.hpp>
+#include <boost/hana/less.hpp>
+#include <boost/hana/plus.hpp>
+#include <boost/hana/minus.hpp>
+#include <boost/hana/map.hpp>
+#include <boost/hana/at.hpp>
+#include <boost/hana/contains.hpp>
+#include <boost/hana/string.hpp>
+#include <boost/hana/for_each.hpp>
 
-#include <boost/hana.hpp>
+#include <boost/hof/lift.hpp>
 
-#include <boost/hof.hpp>
+//#include <boost/mp11/function.hpp>
 
-#include <boost/mp11.hpp>
+//#include <boost/functional.hpp>
 
-#include <boost/functional.hpp>
-
-#include <boost/function_types/result_type.hpp>
-#include <boost/function_types/function_type.hpp>
-#include <boost/function_types/parameter_types.hpp>
-#include <boost/function_types/function_arity.hpp>
+//#include <boost/function_types/result_type.hpp>
+//#include <boost/function_types/function_type.hpp>
+//#include <boost/function_types/parameter_types.hpp>
+//#include <boost/function_types/function_arity.hpp>
 
 #include <boost/callable_traits.hpp>
 
@@ -62,11 +98,11 @@ static_assert(
 
 #include <boost/pfr.hpp>
 
-#include <boost/intrusive/hashtable.hpp>
+//#include <boost/intrusive/hashtable.hpp>
 
-#include <boost/endian/arithmetic.hpp>
+//#include <boost/endian/arithmetic.hpp>
 
-#include <eve/eve.hpp>
+//#include <eve/eve.hpp>
 
 #include <experimental/scope>
 
@@ -81,18 +117,18 @@ namespace stdx = ::std::experimental;
 namespace gnucxx = ::__gnu_cxx;
 namespace pbds = ::__gnu_pbds;
 
-namespace booststl = ::boost::stl_interfaces;
+//namespace booststl = ::boost::stl_interfaces;
 namespace boostmp  = ::boost::multiprecision;
-namespace functional = ::boost::functional;
-namespace fn_types = ::boost::function_types;
-namespace mpl = ::boost::mpl;
+//namespace functional = ::boost::functional;
+//namespace fn_types = ::boost::function_types;
+//namespace mpl = ::boost::mpl;
 namespace hana = ::boost::hana;
-namespace mp11 = ::boost::mp11;
+//namespace mp11 = ::boost::mp11;
 namespace hof = ::boost::hof;
 namespace pfr = ::boost::pfr;
 namespace fn_traits = ::boost::callable_traits;
-namespace intrusive = ::boost::intrusive;
-namespace endian = ::boost::endian;
+//namespace intrusive = ::boost::intrusive;
+//namespace endian = ::boost::endian;
 
 #undef  PACKED_STRUCT
 #undef  PACKED_CLASS
@@ -116,7 +152,7 @@ namespace endian = ::boost::endian;
 #undef  ATTRIBUTE_ALIGNED
 
 #ifdef __has_cpp_attribute
-#  if __has_cpp_attribute(__packed__)
+#  if __has_cpp_attribute(__packed__) && 0 // TODO: why isn't this working?
 #    define ATTRIBUTE_PACKED [[__packed__]]
 #  elif __has_cpp_attribute(__gnu__::__packed__)
 #    define ATTRIBUTE_PACKED [[__gnu__::__packed__]]
@@ -128,7 +164,7 @@ namespace endian = ::boost::endian;
 #endif
 
 #ifdef __has_cpp_attribute
-#  if __has_cpp_attribute(__aligned__)
+#  if __has_cpp_attribute(__aligned__) && 0 // TODO: same as above
 #    define ATTRIBUTE_ALIGNED(align) [[__aligned__(align)]]
 #  elif __has_cpp_attribute(__gnu__::__aligned__)
 #    define ATTRIBUTE_ALIGNED(align) [[__gnu__::__aligned__(align)]]
@@ -1464,6 +1500,7 @@ namespace supdef
         return arity(std::forward<Fn>(fn));
     }
 
+#if 0
     /**
      * @brief A container of containers, to ease sequencing of iteration
      *        over multiple containers
@@ -1491,6 +1528,68 @@ namespace supdef
     private:
         storage_type m_storage;
     };
+#endif
+
+    namespace detail
+    {
+        template <typename... Variants>
+        struct default_constructible_variant_impl
+        {
+            using type = std::conditional_t<
+                std::is_default_constructible_v<nth_type_t<0, Variants...>>,
+                std::variant<Variants...>,
+                std::variant<std::monostate, Variants...>
+            >;
+        };
+
+        template <typename... Variants>
+        struct default_constructible_variant_impl<std::variant<Variants...>>
+        {
+            using type = std::conditional_t<
+                std::is_default_constructible_v<nth_type_t<0, Variants...>>,
+                std::variant<Variants...>,
+                std::variant<std::monostate, Variants...>
+            >;
+        };
+    }
+
+    template <typename... Variants>
+    using default_constructible_variant =
+        typename detail::default_constructible_variant_impl<Variants...>::type;
+
+    namespace detail
+    {
+        template <typename... Variants>
+        static consteval decltype(auto) no_monostate_variant_impl_fn()
+        {
+            return hana::unpack(
+                hana::filter(
+                    hana::tuple_t<Variants...>,
+                    []<typename T>(hana::basic_type<T>) constexpr {
+                        return hana::bool_c<!std::same_as<T, std::monostate>>;
+                    }
+                ), [](auto... args) constexpr {
+                    return hana::template_<std::variant>(args...);
+                }
+            );
+        }
+
+        template <typename... Variants>
+        struct no_monostate_variant_impl
+        {
+            using type = typename decltype(no_monostate_variant_impl_fn<Variants...>())::type;
+        };
+
+        template <typename... Variants>
+        struct no_monostate_variant_impl<std::variant<Variants...>>
+        {
+            using type = typename decltype(no_monostate_variant_impl_fn<Variants...>())::type;
+        };
+    }
+
+    template <typename... Variants>
+    using no_monostate_variant =
+        typename detail::no_monostate_variant_impl<Variants...>::type;
 }
 
 template <typename R>

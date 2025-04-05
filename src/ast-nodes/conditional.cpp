@@ -41,7 +41,7 @@ namespace supdef::ast
         std::unreachable();
     }
 
-    virtual node::kind conditional_node::node_kind() const noexcept override
+    node::kind conditional_node::node_kind() const noexcept
     {
         return kind::conditional;
     }

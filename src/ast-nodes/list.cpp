@@ -14,7 +14,7 @@ namespace supdef::ast
         return m_items;
     }
 
-    virtual bool list_node::is_constant() const noexcept override
+    bool list_node::is_constant() const noexcept
     {
         return std::all_of(
             m_items.cbegin(),
@@ -36,19 +36,19 @@ namespace supdef::ast
         );
     }
 
-    virtual bool list_node::coerce_to_boolean() const override
+    bool list_node::coerce_to_boolean() const
     {
         return !m_items.empty();
     }
 
-    virtual supdef::bigint list_node::coerce_to_integer() const override
+    supdef::bigint list_node::coerce_to_integer() const
     {
         this->requires_constant();
 
         throw std::runtime_error("Cannot coerce list to integer");
     }
 
-    virtual supdef::bigfloat list_node::coerce_to_floating() const override
+    supdef::bigfloat list_node::coerce_to_floating() const
     {
         this->requires_constant();
 
@@ -56,7 +56,7 @@ namespace supdef::ast
     }
 
     // TODO: maybe this is not the best way to represent a list as a string
-    virtual std::u32string list_node::coerce_to_string() const override
+    std::u32string list_node::coerce_to_string() const
     {
         this->requires_constant();
 
@@ -101,7 +101,7 @@ namespace supdef::ast
         return result;
     }
 
-    virtual node::kind list_node::node_kind() const noexcept override
+    node::kind list_node::node_kind() const noexcept
     {
         return kind::list;
     }

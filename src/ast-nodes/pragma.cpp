@@ -38,7 +38,7 @@ namespace supdef::ast
         return m_val;
     }
 
-    virtual node::kind pragma_node::node_kind() const noexcept override
+    node::kind pragma_node::node_kind() const noexcept
     {
         return kind::pragma;
     }

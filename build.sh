@@ -152,7 +152,7 @@ if cpu_is_intel && ! cpu_is_amd; then
 else
     EVE_FLAGS=""
 fi
-define CPPFLAGS "-Iinclude -I/usr/local/include/eve-2023.2.15 -D_GNU_SOURCE=1 -DSTATIC_INITIALIZER_ALLOCATION=1 -DBOOST_PP_LIMIT_MAG=1024 -DBOOST_PP_LIMIT_FOR=1024 -DBOOST_PP_LIMIT_REPEAT=1024 -DBOOST_PP_LIMIT_ITERATION=1024 $EVE_FLAGS"
+define CPPFLAGS "-Iinclude -I/usr/local/include/eve-2023.2.15 -D_GNU_SOURCE=1 -DSTATIC_INITIALIZER_ALLOCATION=1 -DBOOST_PP_LIMIT_MAG=1024 -DBOOST_PP_LIMIT_FOR=1024 -DBOOST_PP_LIMIT_REPEAT=1024 -DBOOST_PP_LIMIT_ITERATION=1024 $EVE_FLAGS -DMAGIC_ENUM_ENABLE_HASH=1"
 
 if [ -z "$OPTIMIZE" ] || [ "$OPTIMIZE" -eq 0 ]; then
     define CFLAGS "$(expand_libs cflags) $common_cflags -Og -ggdb3"
@@ -171,7 +171,11 @@ for file in $files; do
         )" >> $jobfile
 done
 
-cmd parallel --joblog parallel.log -j`nproc` < $jobfile
+if [ -z "$JOBS" ] || [ "$JOBS" -eq 0 ]; then
+    define JOBS "$(nproc)"
+fi
+
+cmd parallel --joblog parallel.log -j$JOBS < $jobfile
 
 if [ "$produce_executable" -eq 1 ]; then
     cmd g++ $CFLAGS $(find -L obj -name '*.o') -o main $LDFLAGS

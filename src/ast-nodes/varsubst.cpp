@@ -34,7 +34,7 @@ namespace supdef::ast
         return !arg() && !var();
     }
 
-    virtual bool varsubst_node::is_constant() const noexcept override
+    bool varsubst_node::is_constant() const noexcept
     {
         // must be interpreted to substitute, first
         // after that only the result can be constant
@@ -43,7 +43,7 @@ namespace supdef::ast
 
     // can not coerce before evaluating the substitution, so do not implement
 
-    virtual node::kind varsubst_node::node_kind() const noexcept override
+    node::kind varsubst_node::node_kind() const noexcept
     {
         return kind::varsubst;
     }

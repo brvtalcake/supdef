@@ -19,7 +19,7 @@ namespace supdef::ast
         return m_path;
     }
 
-    virtual node::kind embed_node::node_kind() const noexcept override
+    node::kind embed_node::node_kind() const noexcept
     {
         return kind::embed;
     }

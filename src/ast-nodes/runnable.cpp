@@ -40,7 +40,7 @@ namespace supdef::ast
         return m_code;
     }
 
-    virtual node::kind runnable_node::node_kind() const noexcept override
+    node::kind runnable_node::node_kind() const noexcept
     {
         return kind::runnable;
     }

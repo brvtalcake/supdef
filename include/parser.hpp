@@ -11,21 +11,6 @@
 #include <ast-fwd.hpp>
 #include <detail/xxhash.hpp>
 
-#include <bits/stdc++.h>
-
-#include <boost/filesystem.hpp>
-#include <boost/process.hpp>
-#include <boost/test/debug.hpp>
-
-#include <magic_enum.hpp>
-
-#include <simdutf.h>
-
-#include <unicode/ustream.h>
-#include <unicode/unistr.h>
-
-#include <boost/logic/tribool.hpp>
-
 namespace supdef
 {
     class parser;

@@ -40,7 +40,7 @@ namespace supdef::ast
     {
     }
 
-    virtual node::kind node::node_kind() const noexcept
+    node::kind node::node_kind() const noexcept
     {
         return kind::unknown;
     }
@@ -70,7 +70,7 @@ namespace supdef::ast
         return ~this->node_kind();
     }
 
-    virtual std::ostream& node::output_to(std::ostream& os) const
+    std::ostream& node::output_to(std::ostream& os) const
     {
         return this->do_output_to(os);
     }
@@ -110,7 +110,7 @@ namespace supdef::ast
         return m_outputs;
     }
 
-    virtual node::kind directive_node::node_kind() const noexcept override
+    node::kind directive_node::node_kind() const noexcept
     {
         return kind::directive;
     }
@@ -129,7 +129,7 @@ namespace supdef::ast
     {
     }
 
-    virtual node::kind expression_node::node_kind() const noexcept override
+    node::kind expression_node::node_kind() const noexcept
     {
         return kind::expression;
     }
@@ -163,8 +163,27 @@ namespace supdef::ast
         return m_replacements.at(0);
     }
 
-    virtual node::kind block_node::node_kind() const noexcept override
+    node::kind block_node::node_kind() const noexcept
     {
         return kind::block;
+    }
+
+    // output functions
+    std::ostream& directive_node::do_output_to(std::ostream& os) const
+    {
+        os << "directive node: " << magic_enum::enum_name(this->node_kind()).data() << '\n';
+        return os;
+    }
+
+    std::ostream& expression_node::do_output_to(std::ostream& os) const
+    {
+        os << "expression node: " << magic_enum::enum_name(this->node_kind()).data() << '\n';
+        return os;
+    }
+
+    std::ostream& block_node::do_output_to(std::ostream& os) const
+    {
+        os << "block node: " << magic_enum::enum_name(this->node_kind()).data() << '\n';
+        return os;
     }
 }

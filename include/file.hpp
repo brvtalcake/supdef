@@ -3,9 +3,6 @@
 
 #include <types.hpp>
 
-#include <filesystem>
-#include <cstdint>
-
 #if defined(__unix__) || defined(__linux__) || defined(__APPLE__)
 #include <sys/mman.h>
 #include <sys/stat.h>

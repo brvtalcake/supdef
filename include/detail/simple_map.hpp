@@ -3,13 +3,6 @@
 
 #include <types.hpp>
 
-#include <tuple>
-#include <bitset>
-#include <type_traits>
-#include <utility>
-#include <algorithm>
-#include <functional>
-
 namespace supdef
 {
 #if 0
