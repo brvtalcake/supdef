@@ -1128,14 +1128,24 @@ parse_builtin(
     ++paren_lvl;
 
     // args
+    auto is_arg_end = [&paren_lvl, &angle_lvl, &brace_lvl, &square_lvl](auto& iter, const auto& tokend) -> bool {
+        return paren_lvl  == 1 &&
+               angle_lvl  == 0 &&
+               brace_lvl  == 0 &&
+               square_lvl == 0 &&
+               accept_token(iter, tokend, { .tkind = token_kind::comma }, NOWS);
+    };
     std::vector<value_type> args;
-    value_type arg;
-    bool void_arg = true;
     while (it != end && paren_lvl > 0)
     {
-        if (handle_special_punct(it, begin, end, paren_lvl, angle_lvl, brace_lvl, square_lvl))
-            continue;
-        
+        value_type arg;
+        bool void_arg = true;
+        while (it != end && !is_arg_end(it, end))
+        {
+            if (handle_special_punct(it, begin, end, paren_lvl, angle_lvl, brace_lvl, square_lvl))
+                continue;
+            // TODO
+        }
     }
 }
 
